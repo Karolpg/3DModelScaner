@@ -25,7 +25,6 @@ SOFTWARE.
 #pragma once
 
 #include <QVulkanWindow>
-#include <memory>
 
 class VulkanWindow : public QVulkanWindow
 {
@@ -36,8 +35,13 @@ public:
     VulkanWindow();
 
     ///From QT documentation:
-    ///This virtual function is called once during the lifetime of the window, at some point after making it visible for the first time.
-    ///The window takes ownership of the returned renderer object.
+    /// This virtual function is called once during the lifetime of the window, at some point after making it visible for the first time.
+    /// The window takes ownership of the returned renderer object.
+    ///Karolpg:
+    /// This is not clear from documentation how this object is handled.
+    /// QVulkanWindowPrivate invoke this function once in init().
+    /// And then in destructor ~QVulkanWindowPrivate it delete allocated object.
+    /// So there is no need to call this function by our site.
     QVulkanWindowRenderer *createRenderer() override;
 
 //s_ignals:
@@ -46,5 +50,5 @@ public:
 
 protected:
     //QVulkanInstance& mVkInstance;
-    std::unique_ptr<QVulkanWindowRenderer> mVulkanRenderer;
+    QVulkanWindowRenderer* mVulkanRenderer = nullptr; // Should not be released here!!!
 };

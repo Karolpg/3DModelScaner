@@ -72,8 +72,6 @@ void MainWindow::initVulkanWindow()
     mVulkanWindow->setWidth(800);
     mVulkanWindow->setHeight(600);
     mVulkanWindow->create();
-    QVulkanWindowRenderer* vulkanRenderer = mVulkanWindow->createRenderer();
-    qInfo("vulkanRenderer = %p\n", vulkanRenderer);
 }
 
 void MainWindow::setVulkanInstance(QVulkanInstance* vkInstance)

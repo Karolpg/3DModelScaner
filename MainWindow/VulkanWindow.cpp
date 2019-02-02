@@ -38,7 +38,7 @@ VulkanWindow::VulkanWindow()
 }
 
 QVulkanWindowRenderer* VulkanWindow::createRenderer() {
-    assert(mVulkanRenderer.get() == nullptr && "Should be called once!!!");
-    mVulkanRenderer = std::unique_ptr<QVulkanWindowRenderer>(new VulkanRenderer());
-    return mVulkanRenderer.get();
+    assert(mVulkanRenderer == nullptr && "Should be called once!!!");
+    mVulkanRenderer = new VulkanRenderer(*this);
+    return mVulkanRenderer;
 }

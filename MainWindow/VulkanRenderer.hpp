@@ -30,17 +30,24 @@ class VulkanRenderer : public QVulkanWindowRenderer
 {
 
 public:
-    VulkanRenderer();
+    VulkanRenderer(QVulkanWindow& parent);
 
+    // Give a last chance to do decisions based on the physical device and the surface.
     //void preInitResources() override;
-    //void initResources() override;
+
+    void initResources() override;
+
     //void initSwapChainResources() override;
+
     //void releaseSwapChainResources() override;
+
     //void releaseResources() override;
 
     void startNextFrame() override;
 
     //void physicalDeviceLost() override;
     //void logicalDeviceLost() override;
-
+protected:
+    QVulkanWindow &mParent;
+    QVulkanDeviceFunctions *mDevFuncs;
 };
