@@ -25,6 +25,39 @@ SOFTWARE.
 #pragma once
 
 #include <QVulkanWindow>
+#include <glm/glm.hpp>
+
+struct BufferDescr {
+    VkBuffer buffer;
+    VkDeviceMemory mem;
+};
+
+struct Material {
+    VkShaderModule vertexShader;
+    VkShaderModule fragmentShader;
+};
+
+struct GraphicObject {
+    BufferDescr vertices;
+    //TODO add something describing vertices attributes
+
+    BufferDescr    indices;
+    VkIndexType    indexType;
+    uint32_t       indicesCount;
+
+    BufferDescr    uniforms;
+
+    Material       material;
+
+    glm::mat4x4    modelMtx;
+};
+
+struct Uniform {
+    glm::mat4x4    mvpMtx;
+    glm::mat4x4    viewMtx;
+    glm::mat4x4    projMtx;
+    glm::mat4x4    modelMtx;
+};
 
 class VulkanRenderer : public QVulkanWindowRenderer
 {
@@ -33,21 +66,52 @@ public:
     VulkanRenderer(QVulkanWindow& parent);
 
     // Give a last chance to do decisions based on the physical device and the surface.
-    //void preInitResources() override;
-
+    void preInitResources() override;
     void initResources() override;
-
-    //void initSwapChainResources() override;
-
-    //void releaseSwapChainResources() override;
-
-    //void releaseResources() override;
-
+    void initSwapChainResources() override;
+    void releaseSwapChainResources() override;
+    void releaseResources() override;
     void startNextFrame() override;
+    void physicalDeviceLost() override;
+    void logicalDeviceLost() override;
 
-    //void physicalDeviceLost() override;
-    //void logicalDeviceLost() override;
+    void rotateCamera(float pitch, float yaw, float roll); //relative rotation x-pitch, y-yaw, z-roll [degree]
+    void moveCamera(float right, float up, float forward); //relative move [meter]
 protected:
+    BufferDescr createBuffer(const void* data, size_t dataSize, VkBufferUsageFlags usage);
+    VkShaderModule createShader(const char* shaderStr, uint32_t shaderLen, int shadercShaderKindEnumVal);
+
+    void createPipeline();
+    void releasePipeline();
+
+    void createCube();
+    void releaseCube();
+    void drawCube();
+
+    void createUniformSet();
+    void releaseUniformSet();
+    void updateUniformBuffer();
+
+    void lookAt(const glm::vec3& eye, const glm::vec3& center, const glm::vec3& up);
+    void preparePerspective(float fovRadians, float width, float height, float minDepth, float maxDepth);
+
+    GraphicObject mCube;
+
+    VkPipeline mPipeline;
+    VkPipelineLayout mPipelineLayout;
+
+    VkDescriptorPool      mDescriptorPool;
+    VkDescriptorSetLayout mDescriptorSetLayout;
+    VkDescriptorSet       mUniformDescriptorSet;
+
+    glm::vec3 mEyePosition;
+    glm::vec3 mEyeLookAtDir;
+    const float mEyeLookAtDistance = 0.5f;
+    const glm::vec3 mUpDir = glm::vec3(0.f, 1.f, 0.f); //-1 because of Vulkan Coordinates
+
+    glm::mat4x4 mViewMtx;
+    glm::mat4x4 mProjMtx;
+
     QVulkanWindow &mParent;
     QVulkanDeviceFunctions *mDevFuncs;
 };

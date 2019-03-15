@@ -31,6 +31,7 @@ SOFTWARE.
 #include <QPlainTextEdit>
 
 #include <QVulkanInstance>
+#include <QVulkanDeviceFunctions>
 //#include <vulkan/vulkan.hpp>
 #include "VulkanWindow.hpp"
 
@@ -153,6 +154,34 @@ void MainWindow::displayVulkanInfo()
             text += o + QString("Extension-%1: %2")
                             .arg(i+1, 2, 10, QChar('0'))
                             .arg(extensions[i].data());
+        }
+
+        text += "\n\n";
+
+        uint32_t physicalDeviceCount = 0;
+        mVulkanInstance->functions()->vkEnumeratePhysicalDevices(mVulkanInstance->vkInstance(), &physicalDeviceCount, nullptr);
+        std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
+        mVulkanInstance->functions()->vkEnumeratePhysicalDevices(mVulkanInstance->vkInstance(), &physicalDeviceCount, physicalDevices.data());
+
+        for (uint32_t physicalDev = 0; physicalDev < physicalDevices.size(); ++physicalDev) {
+
+            text += QApplication::translate("displayVulkanInfo", "Physical device: %n", nullptr, static_cast<int>(physicalDev));
+
+            VkPhysicalDeviceMemoryProperties physDevMemProps;
+            mVulkanInstance->functions()->vkGetPhysicalDeviceMemoryProperties(physicalDevices[physicalDev], &physDevMemProps);
+
+            for (uint32_t i = 0; i < physDevMemProps.memoryTypeCount; i++) {
+                QString infoText;
+                infoText += (physDevMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT     ) ? "device local; "  : "";
+                infoText += (physDevMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT     ) ? "host visible; "  : "";
+                infoText += (physDevMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT    ) ? "host coherent; " : "";
+                infoText += (physDevMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT      ) ? "host cached; "   : "";
+                infoText += (physDevMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT ) ? "lazzy alloc; "   : "";
+                infoText += (physDevMemProps.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_PROTECTED_BIT        ) ? "protected; "     : "";
+                text += o + QString("Memory-%1: %2")
+                                .arg(1 << i)
+                                .arg(infoText);
+            }
         }
     }
 
@@ -337,38 +366,47 @@ void MainWindow::displayVulkanInfo()
 
         text += "\n";
 
-        text += QApplication::translate("displayVulkanInfo", "\nPhysical device: ") + QString().asprintf("%p", mVulkanWindow->physicalDevice());
-        text += QApplication::translate("displayVulkanInfo", "\nPhysical device props: ") + QString().asprintf("%p", mVulkanWindow->physicalDeviceProperties());
-        text += QApplication::translate("displayVulkanInfo", "\nDevice: ") + QString().asprintf("%p", mVulkanWindow->device());
-        text += QApplication::translate("displayVulkanInfo", "\nQueue: ") + QString().asprintf("%p", mVulkanWindow->graphicsQueue());
-        text += QApplication::translate("displayVulkanInfo", "\nCmd pool: ") + QString().asprintf("%p", mVulkanWindow->graphicsCommandPool());
+        text += QApplication::translate("displayVulkanInfo", "\nPhysical device: ") + QString().asprintf("%p", static_cast<const void*>(mVulkanWindow->physicalDevice()));
+        text += QApplication::translate("displayVulkanInfo", "\nPhysical device props: ") + QString().asprintf("%p", static_cast<const void*>(mVulkanWindow->physicalDeviceProperties()));
+        text += QApplication::translate("displayVulkanInfo", "\nDevice: ") + QString().asprintf("%p", static_cast<const void*>(mVulkanWindow->device()));
+        text += QApplication::translate("displayVulkanInfo", "\nQueue: ") + QString().asprintf("%p",static_cast<const void*>( mVulkanWindow->graphicsQueue()));
+        text += QApplication::translate("displayVulkanInfo", "\nCmd pool: ") + QString().asprintf("%p", static_cast<const void*>(mVulkanWindow->graphicsCommandPool()));
         text += QApplication::translate("displayVulkanInfo", "\nHost mem Idx: ") + QString().asprintf("%d", mVulkanWindow->hostVisibleMemoryIndex());
         text += QApplication::translate("displayVulkanInfo", "\nDev  mem Idx: ") + QString().asprintf("%d", mVulkanWindow->deviceLocalMemoryIndex());
-        text += QApplication::translate("displayVulkanInfo", "\nRender pass: ") + QString().asprintf("%p", mVulkanWindow->defaultRenderPass());
+        text += QApplication::translate("displayVulkanInfo", "\nRender pass: ") + QString().asprintf("%p", static_cast<const void*>(mVulkanWindow->defaultRenderPass()));
 
 
         text += QApplication::translate("displayVulkanInfo", "\nColor format: %1").arg(VkFormatToStr(mVulkanWindow->colorFormat()));
         text += QApplication::translate("displayVulkanInfo", "\nDepth stencil format: %1").arg(VkFormatToStr(mVulkanWindow->depthStencilFormat()));
         QSize sciSize = mVulkanWindow->swapChainImageSize();
         text += QApplication::translate("displayVulkanInfo", "\nSwapchain image size: %1x%2").arg(sciSize.width()).arg(sciSize.height());
-        text += QApplication::translate("displayVulkanInfo", "\nCurrent cmd buf: ") + QString().asprintf("%p", mVulkanWindow->currentCommandBuffer());
-        text += QApplication::translate("displayVulkanInfo", "\nCurrent frame buf: ") + QString().asprintf("%p", mVulkanWindow->currentFramebuffer());
+        text += QApplication::translate("displayVulkanInfo", "\nCurrent cmd buf: ") + QString().asprintf("%p", static_cast<const void*>(mVulkanWindow->currentCommandBuffer()));
+        text += QApplication::translate("displayVulkanInfo", "\nCurrent frame buf: ") + QString().asprintf("%p", static_cast<const void*>(mVulkanWindow->currentFramebuffer()));
         text += QApplication::translate("displayVulkanInfo", "\nConcurrnet frame count: %1").arg(mVulkanWindow->concurrentFrameCount());
         text += QApplication::translate("displayVulkanInfo", "\nSwapChain image count: %1").arg(mVulkanWindow->swapChainImageCount());
         text += QApplication::translate("displayVulkanInfo", "\nCurrent swapchain image idx: %1").arg(mVulkanWindow->currentSwapChainImageIndex());
 
         for (int i = 0; i < mVulkanWindow->swapChainImageCount(); ++i) {
-            text += o + QApplication::translate("displayVulkanInfo", "Swapchain img %1 - ").arg(i) + QString().asprintf("%p", mVulkanWindow->swapChainImage(i));
-            text += o + QApplication::translate("displayVulkanInfo", "Swapchain img view %1 - ").arg(i) + QString().asprintf("%p", mVulkanWindow->swapChainImageView(i));
+            text += o + QApplication::translate("displayVulkanInfo", "Swapchain img %1 - ").arg(i) + QString().asprintf("%p", static_cast<const void*>(mVulkanWindow->swapChainImage(i)));
+            text += o + QApplication::translate("displayVulkanInfo", "Swapchain img view %1 - ").arg(i) + QString().asprintf("%p", static_cast<const void*>(mVulkanWindow->swapChainImageView(i)));
             //Below: Multisample color image, or VK_NULL_HANDLE if multisampling is not in use.
-            text += o + QApplication::translate("displayVulkanInfo", "Msaa Color Image %1 - ").arg(i) + QString().asprintf("%p", mVulkanWindow->msaaColorImage(i));
-            text += o + QApplication::translate("displayVulkanInfo", "Msaa Color Image view %1 - ").arg(i) + QString().asprintf("%p", mVulkanWindow->msaaColorImageView(i));
+            text += o + QApplication::translate("displayVulkanInfo", "Msaa Color Image %1 - ").arg(i) + QString().asprintf("%p", static_cast<const void*>(mVulkanWindow->msaaColorImage(i)));
+            text += o + QApplication::translate("displayVulkanInfo", "Msaa Color Image view %1 - ").arg(i) + QString().asprintf("%p", static_cast<const void*>(mVulkanWindow->msaaColorImageView(i)));
         }
 
-        text += QApplication::translate("displayVulkanInfo", "\nSwapchain depth/stencil - ") + QString().asprintf("%p", mVulkanWindow->depthStencilImage());
-        text += QApplication::translate("displayVulkanInfo", "\nSwapchain depth/stencil view - ") + QString().asprintf("%p", mVulkanWindow->depthStencilImageView());
+        text += QApplication::translate("displayVulkanInfo", "\nSwapchain depth/stencil - ") + QString().asprintf("%p", static_cast<const void*>(mVulkanWindow->depthStencilImage()));
+        text += QApplication::translate("displayVulkanInfo", "\nSwapchain depth/stencil view - ") + QString().asprintf("%p", static_cast<const void*>(mVulkanWindow->depthStencilImageView()));
 
         text += QApplication::translate("displayVulkanInfo", "\nSample Count Flag Bits: %1").arg(mVulkanWindow->sampleCountFlagBits());
+
+        //TODO
+        //take and display all properties of queue!!!
+//        QVulkanFunctions *f = inst->functions();
+
+//        uint32_t queueCount = 0;
+//        f->vkGetPhysicalDeviceQueueFamilyProperties(physDev, &queueCount, nullptr);
+//        QVector<VkQueueFamilyProperties> queueFamilyProps(queueCount);
+//        f->vkGetPhysicalDeviceQueueFamilyProperties(physDev, &queueCount, queueFamilyProps.data());
     }
 
     QPlainTextEdit* textField = new QPlainTextEdit(&infoDialog);
@@ -390,7 +428,7 @@ void MainWindow::displayVulkanInfo()
     else if (linesHeight < 320) {
         linesHeight = 320;
     }
-    int newWidth = aspect * linesHeight;
+    int newWidth = static_cast<int>(aspect * linesHeight);
     if (newWidth > 1920) {
         newWidth = 1920;
     }

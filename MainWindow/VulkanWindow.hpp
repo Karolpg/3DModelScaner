@@ -26,12 +26,13 @@ SOFTWARE.
 
 #include <QVulkanWindow>
 
+class VulkanRenderer;
+
 class VulkanWindow : public QVulkanWindow
 {
     Q_OBJECT
 
 public:
-    //VulkanWindow(QVulkanInstance& vkInstance);
     VulkanWindow();
 
     ///From QT documentation:
@@ -44,11 +45,16 @@ public:
     /// So there is no need to call this function by our site.
     QVulkanWindowRenderer *createRenderer() override;
 
+protected:
+    void keyPressEvent(QKeyEvent *) override;
+    void mousePressEvent(QMouseEvent *) override;
+    void mouseMoveEvent(QMouseEvent *) override;
+
 //s_ignals:
 //    void vulkanInfoReceived(const QString &text);
 //    void frameQueued(int colorValue);
 
 protected:
-    //QVulkanInstance& mVkInstance;
-    QVulkanWindowRenderer* mVulkanRenderer = nullptr; // Should not be released here!!!
+    VulkanRenderer* mVulkanRenderer = nullptr; // Should not be released here!!!
+    QPointF mPrevCursorPosition;
 };

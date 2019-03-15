@@ -36,8 +36,10 @@ endif()
 message("VK_PATH = $ENV{VK_PATH}")
 find_program(GLSLANG_VALIDATOR glslangValidator PATHS $ENV{VK_PATH}/bin)
 find_library(VULKAN_LIB vulkan $ENV{VK_PATH}/lib)
+find_library(SHADERC_LIB shaderc_combined $ENV{VK_PATH}/lib/libshaderc)
 
 set(VK_INCLUDE_DIRS "$ENV{VK_PATH}/include")
+set(GLM_INCLUDE_DIRS "../Submodule/glm")
 
 # Qt configuration to work with Vulkan
 message("#################################################################################")

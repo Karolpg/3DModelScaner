@@ -24,21 +24,63 @@ SOFTWARE.
 
 #include "VulkanWindow.hpp"
 #include "VulkanRenderer.hpp"
-
-/*
-VulkanWindow::VulkanWindow(QVulkanInstance& vkInstance)
-    : mVkInstance(vkInstance)
-{
-    setVulkanInstance(&mVkInstance);
-}*/
+#include <QInputEvent>
+#include <set>
 
 VulkanWindow::VulkanWindow()
 {
-
 }
 
-QVulkanWindowRenderer* VulkanWindow::createRenderer() {
+QVulkanWindowRenderer* VulkanWindow::createRenderer()
+{
     assert(mVulkanRenderer == nullptr && "Should be called once!!!");
     mVulkanRenderer = new VulkanRenderer(*this);
     return mVulkanRenderer;
+}
+
+void VulkanWindow::keyPressEvent(QKeyEvent *event)
+{
+    static const std::set<int> movementSet = {Qt::Key_W, Qt::Key_S, Qt::Key_A, Qt::Key_D, Qt::Key_Q, Qt::Key_E};
+    if (mVulkanRenderer
+     && event
+     && movementSet.find(event->key()) != movementSet.end()) {
+
+        float moveRight = 0;
+        float moveUp = 0;
+        float moveForward = 0;
+        float speed = 0.3f; //[m / pressEvent]
+        moveRight += event->key() == Qt::Key_D ?  speed : 0.f;
+        moveRight += event->key() == Qt::Key_A ? -speed : 0.f;
+        moveForward += event->key() == Qt::Key_W ?  speed : 0.f;
+        moveForward += event->key() == Qt::Key_S ? -speed : 0.f;
+        moveUp += event->key() == Qt::Key_E ?  speed : 0.f;
+        moveUp += event->key() == Qt::Key_Q ? -speed : 0.f;
+
+        mVulkanRenderer->moveCamera(moveRight, moveUp, moveForward);
+        requestUpdate();
+    }
+    QVulkanWindow::keyPressEvent(event);
+}
+
+void VulkanWindow::mousePressEvent(QMouseEvent *event)
+{
+    if (event
+     && event->button() & Qt::LeftButton) {
+        mPrevCursorPosition = event->localPos();
+    }
+    QVulkanWindow::mousePressEvent(event);
+}
+void VulkanWindow::mouseMoveEvent(QMouseEvent *event)
+{
+    if (mVulkanRenderer
+     && event
+     && (event->buttons() & Qt::LeftButton)) {
+        QPointF mouseMove = event->localPos() - mPrevCursorPosition;
+        mPrevCursorPosition = event->localPos();
+
+        float speed = 0.5f; // [degree / pixel]
+        mVulkanRenderer->rotateCamera(speed * static_cast<float>(mouseMove.y()), speed * static_cast<float>(mouseMove.x()), 0.f);
+        requestUpdate();
+    }
+    QVulkanWindow::mouseMoveEvent(event);
 }
