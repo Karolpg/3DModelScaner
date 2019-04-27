@@ -1,0 +1,39 @@
+#CompileShader_
+
+#
+# Compile one shader
+#
+function(compileShader inputPath outputPath)
+
+    message("Add compiling shader: ${GLSLANG_VALIDATOR} -o \"${outputPath}\" \"${inputPath}\"")
+    add_custom_command(
+        COMMENT "Compiling shader: \"${inputPath}\" as \"${outputPath}\""
+        OUTPUT ${outputPath}
+        COMMAND ${GLSLANG_VALIDATOR} -V -o ${outputPath} ${inputPath}
+        MAIN_DEPENDENCY ${inputPath}
+        DEPENDS ${inputPath} ${GLSLANG_VALIDATOR}
+    )
+
+endfunction(compileShader)
+
+
+#
+# Compile batch of shaders
+#
+function(compileShaders inputDirPath outputDirPath commandOutList)
+
+    set(tempOut)
+    file(MAKE_DIRECTORY ${outputDirPath})
+    file(GLOB fileList RELATIVE ${inputDirPath} ${inputDirPath}/*)
+    foreach(file ${fileList})
+        set(inFilePath "${inputDirPath}/${file}")
+        set(outFilePath "${outputDirPath}/${file}.bin")
+        compileShader(${inFilePath} ${outFilePath})
+        list(APPEND tempOut ${outFilePath})
+#        message("-${tempOut}-")
+    endforeach()
+
+    set(${commandOutList} ${tempOut} PARENT_SCOPE)
+
+endfunction(compileShaders)
+

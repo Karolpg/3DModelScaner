@@ -26,31 +26,10 @@ SOFTWARE.
 
 #include <QVulkanWindow>
 #include <glm/glm.hpp>
+#include <memory>
 
-struct BufferDescr {
-    VkBuffer buffer;
-    VkDeviceMemory mem;
-};
-
-struct Material {
-    VkShaderModule vertexShader;
-    VkShaderModule fragmentShader;
-};
-
-struct GraphicObject {
-    BufferDescr vertices;
-    //TODO add something describing vertices attributes
-
-    BufferDescr    indices;
-    VkIndexType    indexType;
-    uint32_t       indicesCount;
-
-    BufferDescr    uniforms;
-
-    Material       material;
-
-    glm::mat4x4    modelMtx;
-};
+#include "GraphicObject.hpp"
+#include "PipelineManager.hpp"
 
 struct Uniform {
     glm::mat4x4    mvpMtx;
@@ -78,31 +57,25 @@ public:
     void rotateCamera(float pitch, float yaw, float roll); //relative rotation x-pitch, y-yaw, z-roll [degree]
     void moveCamera(float right, float up, float forward); //relative move [meter]
 protected:
-    BufferDescr createBuffer(const void* data, size_t dataSize, VkBufferUsageFlags usage);
     VkShaderModule createShader(const char* shaderStr, uint32_t shaderLen, int shadercShaderKindEnumVal);
 
+    /*
     void createPipeline();
     void releasePipeline();
+    */
 
     void createCube();
     void releaseCube();
     void drawCube();
 
     void createUniformSet();
-    void releaseUniformSet();
     void updateUniformBuffer();
 
     void lookAt(const glm::vec3& eye, const glm::vec3& center, const glm::vec3& up);
     void preparePerspective(float fovRadians, float width, float height, float minDepth, float maxDepth);
 
-    GraphicObject mCube;
-
-    VkPipeline mPipeline;
-    VkPipelineLayout mPipelineLayout;
-
-    VkDescriptorPool      mDescriptorPool;
-    VkDescriptorSetLayout mDescriptorSetLayout;
-    VkDescriptorSet       mUniformDescriptorSet;
+    std::unique_ptr<GraphicObject> mCube;
+    std::unique_ptr<PipelineManager> mPipelineMgr;
 
     glm::vec3 mEyePosition;
     glm::vec3 mEyeLookAtDir;

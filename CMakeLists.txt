@@ -34,12 +34,19 @@ if ("$ENV{VK_PATH}" EQUAL "" OR NOT IS_DIRECTORY "$ENV{VK_PATH}")
 endif()
 
 message("VK_PATH = $ENV{VK_PATH}")
+
+get_filename_component(VK_INCLUDE_DIRS "$ENV{VK_PATH}/include" ABSOLUTE)
+get_filename_component(GLM_INCLUDE_DIRS "Submodule/glm" ABSOLUTE)
+get_filename_component(SPIRV_CROSS_PATH "Submodule/SPIRV-Cross" ABSOLUTE)
+
+message("VK_INCLUDE_DIRS  = ${VK_INCLUDE_DIRS}")
+message("GLM_INCLUDE_DIRS = ${GLM_INCLUDE_DIRS}")
+message("SPIRV_CROSS_PATH = ${SPIRV_CROSS_PATH}")
+
 find_program(GLSLANG_VALIDATOR glslangValidator PATHS $ENV{VK_PATH}/bin)
 find_library(VULKAN_LIB vulkan $ENV{VK_PATH}/lib)
 find_library(SHADERC_LIB shaderc_combined $ENV{VK_PATH}/lib/libshaderc)
-
-set(VK_INCLUDE_DIRS "$ENV{VK_PATH}/include")
-set(GLM_INCLUDE_DIRS "../Submodule/glm")
+find_library(SPIRV_CROSS_LIB spirv-cross ${SPIRV_CROSS_PATH})
 
 # Qt configuration to work with Vulkan
 message("#################################################################################")
