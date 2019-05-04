@@ -27,6 +27,7 @@ SOFTWARE.
 #include "BufferDescr.hpp"
 #include <glm/glm.hpp>
 #include <memory>
+#include <vector>
 #include "PipelineManager.hpp"
 
 struct GraphicObject
@@ -40,6 +41,7 @@ struct GraphicObject
 
     //TODO invent something better to share uniforms and keep only offset or sth
     std::unique_ptr<BufferDescr> uniforms;
+    std::vector<std::vector<VkDescriptorBufferInfo>> uniformMapping; // key1 - descr set id, key2 - binding
 
     const PipelineManager::PipelineInfo* pipelineInfo;
 

@@ -36,10 +36,15 @@ class QVulkanDeviceFunctions;
 class PipelineManager
 {
 public:
+    struct BindingInfo {
+        VkDescriptorSetLayoutBinding vdslbInfo;
+        size_t byteSize;
+    };
+
     struct DescriptorSetInfo {
         VkDescriptorSetLayout layout;
         VkDescriptorSet       descriptor;
-        std::vector<VkDescriptorSetLayoutBinding> bindingInfo;
+        std::vector<BindingInfo> bindingInfo;
     };
 
     struct PipelineInfo {
@@ -82,7 +87,7 @@ protected:
     };
 
     struct UniformInfo{
-        std::vector<std::vector<VkDescriptorSetLayoutBinding>> descriptorSetsSpecifications; // descriptorSetSpecifications[ descriptorSet ][ binding ]
+        std::vector<std::vector<BindingInfo>> descriptorSetsSpecifications; // descriptorSetSpecifications[ descriptorSet ][ bindingIdx ]
     };
 
     struct ShaderInfo {

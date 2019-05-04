@@ -189,66 +189,12 @@ void VulkanRenderer::createCube()
     mCube->uniforms = std::unique_ptr<BufferDescr>(new BufferDescr(*mParent.vulkanInstance(), mParent.device(), mParent.physicalDevice()));
     mCube->uniforms->createBuffer(&uniformDefinition, sizeof(uniformDefinition), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
-    const char simpleVertexShaderTxt[] =
-        "#version 450\n"
-        "layout(location = 0) in vec3 pos;\n"
-        "void main() {\n"
-        "    gl_Position = vec4(pos, 1.0);\n"
-        "}\n";
-
-    const char vertexShaderTxt[] =
-        "#version 450\n"
-        "layout(location = 0) in vec3 pos;\n"
-        "layout(location = 0) out vec3 posOut;\n"
-        "layout(binding = 0) uniform buf {\n"
-        "            mat4 mvp;            \n"
-        "            mat4 view;           \n"
-        "            mat4 proj;           \n"
-        "            mat4 model;          \n"
-        "    } uniformBuf;                \n"
-        "                                 \n"
-
-        "void main() {                    \n"
-        "    posOut = pos;                           \n"
-        "    vec4 posLocal = vec4(pos, 1.0);         \n"
-        "    gl_Position = uniformBuf.mvp * posLocal;\n"
-        "}                                           \n";
-
-    const char dirShowfragmentShaderTxt[] =
-        "#version 450\n"
-        "#extension GL_ARB_separate_shader_objects : enable\n"
-
-        "layout(location = 0) in vec3 pixelPos;\n"
-        "layout(location = 0) out vec4 outColor;"
-
-        "void main() {"
-            "      if (pixelPos.x < 0 && pixelPos.y < 0 && pixelPos.z < 0)  outColor = vec4(0.3,0.3,0.3,1);"
-
-            " else if (pixelPos.x >= 0 && pixelPos.y < 0 && pixelPos.z < 0) outColor = vec4(1.0,0.3,0.3,1);"
-            " else if (pixelPos.x < 0 && pixelPos.y >= 0 && pixelPos.z < 0) outColor = vec4(0.3,1.0,0.3,1);"
-            " else if (pixelPos.x < 0 && pixelPos.y < 0 && pixelPos.z >= 0) outColor = vec4(0.3,0.3,1.0,1);"
-
-            " else if (pixelPos.x < 0 && pixelPos.y >= 0 && pixelPos.z >= 0) outColor = vec4(0.3, 1.0, 1.0,1);"
-            " else if (pixelPos.x >= 0 && pixelPos.y < 0 && pixelPos.z >= 0) outColor = vec4(1.0, 0.3, 1.0,1);"
-
-            " else if (pixelPos.x >= 0 && pixelPos.y >= 0 && pixelPos.z < 0) outColor = vec4(1.0, 1.0, 0.3,1);"
-
-            " else if (pixelPos.x >= 0 && pixelPos.y >= 0 && pixelPos.z >= 0) outColor = vec4(1.0, 1.0, 1.0,1);"
-            " else outColor = vec4(0.5, 1.0, 1.0, 1);"
-
-        //"    outColor = vec4((pixelPos + 1.0)/2.0, 1.0);"
-        "}";
-
-    const char fragmentShaderTxt[] =
-        "#version 450\n"
-        "#extension GL_ARB_separate_shader_objects : enable\n"
-
-        "layout(location = 0) in vec3 pixelPos;\n"
-        "layout(location = 0) out vec4 outColor;"
-
-        "void main() {"
-        "    outColor = vec4((pixelPos + 1.0)/2.0, 1.0);"
-        "}";
+    mCube->uniformMapping.resize(1); // one descriptor set
+    mCube->uniformMapping.back().resize(1); // one binding
+    VkDescriptorBufferInfo& uniformBufferInfo = mCube->uniformMapping.back().back();
+    uniformBufferInfo.buffer = mCube->uniforms->getBuffer();
+    uniformBufferInfo.offset = 0;
+    uniformBufferInfo.range = sizeof(Uniform);
 
     mCube->modelMtx = glm::identity<glm::mat4>();
 }
@@ -289,12 +235,6 @@ void VulkanRenderer::drawCube()
 
     //vkCmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
     mDevFuncs->vkCmdDrawIndexed(cmdBuf, mCube->indicesCount, 1, 0, 0, 0);
-
-    //void vkCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
-    //mDevFuncs->vkCmdDraw(cmdBuf, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
-
-
-//    mDevFuncs->vkCmdDraw(cmdBuf, 6, 1, 0, 0);
 }
 
 void VulkanRenderer::createUniformSet()
@@ -302,17 +242,52 @@ void VulkanRenderer::createUniformSet()
     VkDevice device = mParent.device();
 
     //
+    // Validation
+    //
+    if (mCube->uniformMapping.size() != mCube->pipelineInfo->descriptorSetInfo.size()) {
+        qWarning("Inconsistent data. uniformMapping.size() = %d, descriptorSetInfo.size() = %d"
+                 , static_cast<uint32_t>(mCube->uniformMapping.size())
+                 , static_cast<uint32_t>(mCube->pipelineInfo->descriptorSetInfo.size()));
+        return;
+    }
+    if (mCube->uniformMapping.empty()) {
+        //nothing to do here - both vectors are empty
+        return;
+    }
+
+    //
+    // Calculate memory and process additional validation
+    //
+    size_t allBindings = 0;
+    for (size_t descriptorSetIdx = 0; descriptorSetIdx < mCube->pipelineInfo->descriptorSetInfo.size(); ++descriptorSetIdx) {
+        const PipelineManager::DescriptorSetInfo& dsi = mCube->pipelineInfo->descriptorSetInfo[descriptorSetIdx];
+        size_t shaderBindings = dsi.bindingInfo.size();
+        size_t objectBindings = mCube->uniformMapping[descriptorSetIdx].size();
+
+        if (objectBindings != shaderBindings) {
+            qWarning("Inconsistent data. Descriptor = %d objectBindings = %d, shaderBindings = %d"
+                     , static_cast<uint32_t>(descriptorSetIdx)
+                     , static_cast<uint32_t>(objectBindings)
+                     , static_cast<uint32_t>(shaderBindings));
+            return;
+        }
+        allBindings += shaderBindings;
+
+        for (size_t bindingIdx = 0; bindingIdx < dsi.bindingInfo.size(); ++bindingIdx) {
+            assert(bindingIdx == dsi.bindingInfo[bindingIdx].vdslbInfo.binding);
+            if (mCube->uniformMapping[descriptorSetIdx][bindingIdx].range != dsi.bindingInfo[bindingIdx].byteSize) { // check if it was correctly provided/created in app and shader
+                qWarning("Inconsistent data. Descriptor = %d binding = %d objectDataSize = %d, shaderDataSize = %d"
+                         , static_cast<uint32_t>(descriptorSetIdx)
+                         , static_cast<uint32_t>(bindingIdx)
+                         , static_cast<uint32_t>(mCube->uniformMapping[descriptorSetIdx][bindingIdx].range)
+                         , static_cast<uint32_t>(dsi.bindingInfo[bindingIdx].byteSize));
+            }
+        }
+    }
+
+    //
     // Make connection between Buffor and DescriptorSet
     //
-    VkDescriptorBufferInfo uniformBufferInfo;
-    uniformBufferInfo.buffer = mCube->uniforms->getBuffer();
-    uniformBufferInfo.offset = 0;
-    uniformBufferInfo.range = sizeof(Uniform); // TODO calculate this size from shader and check if it was correctly provided
-
-    size_t allBindings = 0;
-    for (size_t i = 0; i < mCube->pipelineInfo->descriptorSetInfo.size(); ++i) {
-        allBindings += mCube->pipelineInfo->descriptorSetInfo[i].bindingInfo.size();
-    }
     std::vector<VkWriteDescriptorSet> uniformsWrite(allBindings);
     VkWriteDescriptorSet* writeDs = uniformsWrite.data();
     for (size_t descriptorSetIdx = 0; descriptorSetIdx < mCube->pipelineInfo->descriptorSetInfo.size(); ++descriptorSetIdx) {
@@ -321,13 +296,16 @@ void VulkanRenderer::createUniformSet()
             writeDs->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             writeDs->pNext = nullptr;
             writeDs->dstSet = dsi.descriptor;
-            writeDs->dstBinding = dsi.bindingInfo[bindingIdx].binding;
+            writeDs->dstBinding = dsi.bindingInfo[bindingIdx].vdslbInfo.binding;
             writeDs->dstArrayElement = 0; // is the starting element in that array. If the descriptor binding identified by ... then dstArrayElement specifies the starting byte ...
-            writeDs->descriptorType = dsi.bindingInfo[bindingIdx].descriptorType;
-            writeDs->descriptorCount = dsi.bindingInfo[bindingIdx].descriptorCount; //is the number of descriptors to update (the number of elements in pImageInfo, pBufferInfo, or pTexelBufferView
-            assert(writeDs->descriptorCount == 1 && "Currently only one elemnt array available!");
+            writeDs->descriptorType = dsi.bindingInfo[bindingIdx].vdslbInfo.descriptorType;
+
+            writeDs->descriptorCount = 1; // hope that binding proper uniform to cover possible array in shader will be OK // TODO check it !!!
+            //writeDs->descriptorCount = dsi.bindingInfo[bindingIdx].vdslbInfo.descriptorCount; //is the number of descriptors to update (the number of elements in pImageInfo, pBufferInfo, or pTexelBufferView
+            //assert(writeDs->descriptorCount == 1 && "Currently only one elemnt array available!");)
+
             writeDs->pImageInfo = nullptr;
-            writeDs->pBufferInfo = &uniformBufferInfo; // TODO have to be changed
+            writeDs->pBufferInfo = &mCube->uniformMapping[descriptorSetIdx][bindingIdx];
             writeDs->pTexelBufferView = nullptr;
             ++writeDs;
         }

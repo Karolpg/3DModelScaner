@@ -301,11 +301,11 @@ static void fillShaderInput(const std::string& shaderPath,
     }
 }
 
-static void fillUniformInfo(const std::string& /*shaderPath*/,
+static void fillUniformInfo(const std::string& shaderPath,
                             VkShaderStageFlagBits stage,
                             const spirv_cross::Compiler& resourcesCtx,
                             const spirv_cross::ShaderResources& resources,
-                            std::vector<std::vector<VkDescriptorSetLayoutBinding>>& descriptorSetsSpecifications)
+                            std::vector<std::vector<PipelineManager::BindingInfo>>& descriptorSetsSpecifications)
 {
     for (uint32_t i = 0; i < resources.uniform_buffers.size(); ++i) {
         const spirv_cross::Resource& uniformRes = resources.uniform_buffers[i];
@@ -320,29 +320,27 @@ static void fillUniformInfo(const std::string& /*shaderPath*/,
         }
 
         if (descriptorSetsSpecifications.size() <= descriptorSet) {
-            descriptorSetsSpecifications.push_back(std::vector<VkDescriptorSetLayoutBinding>());
+            descriptorSetsSpecifications.resize(descriptorSet + 1); // assume that there will be no empty descriptor set, if not then change it on the map
         }
-        descriptorSetsSpecifications[descriptorSet].push_back(VkDescriptorSetLayoutBinding());
-        VkDescriptorSetLayoutBinding& descriptorSetSpecification = descriptorSetsSpecifications[descriptorSet].back();
+        descriptorSetsSpecifications[descriptorSet].push_back(PipelineManager::BindingInfo());
+        PipelineManager::BindingInfo& bindingInfo = descriptorSetsSpecifications[descriptorSet].back();
 
         //
         // Layout of the descriptor set - how it will be used in shader
         //
-        descriptorSetSpecification.binding = binding; //start from binding
-        descriptorSetSpecification.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptorSetSpecification.descriptorCount = arraySize; // for arrays
-        descriptorSetSpecification.stageFlags = stage;
-        descriptorSetSpecification.pImmutableSamplers = nullptr;
+        bindingInfo.vdslbInfo.binding = binding; //start from binding
+        bindingInfo.vdslbInfo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        bindingInfo.vdslbInfo.descriptorCount = arraySize; // for arrays
+        bindingInfo.vdslbInfo.stageFlags = stage;
+        bindingInfo.vdslbInfo.pImmutableSamplers = nullptr;
 
-        /*
-        //
-        // Display uniform info
-        //
         //std::string variableName = uniformRes.name;
         //variableName = variableName.empty() ? resourcesCtx.get_name(uniformRes.id) : variableName;
         //variableName = variableName.empty() ? resourcesCtx.get_fallback_name(uniformRes.id) : variableName;
 
         if (variableType.basetype == spirv_cross::SPIRType::Struct) {
+            bindingInfo.byteSize = resourcesCtx.get_declared_struct_size(variableType);
+            /*
             for(uint32_t j = 0; j < variableType.member_types.size(); ++j) {
                 spirv_cross::SPIRType subVarType = resourcesCtx.get_type(variableType.member_types[j]);
 
@@ -351,7 +349,7 @@ static void fillUniformInfo(const std::string& /*shaderPath*/,
 
                 std::string memberName = resourcesCtx.get_member_name(uniformRes.type_id, j);
 
-                qInfo("Uniform: (%s %s %s).(%s %s %s) id:%d(%d) type:%d(%d) base:%d size:%d(%d-%d) offset:%d arrayStride:_d matrixStride:%d bitset:0x%llx binding:%d descriptorSet:%d"
+                qInfo("Uniform: (%s %s %s).(%s %s %s) id:%d(%d) type:%d(%d) base:%d size:%d(%d-%d) offset:%d arrayStride:_d matrixStride:_d bitset:0x%llx binding:%d descriptorSet:%d"
                       , uniformRes.name.c_str(), resourcesCtx.get_name(uniformRes.id).c_str(), resourcesCtx.get_fallback_name(uniformRes.id).c_str()
                       , resourcesCtx.get_member_name(uniformRes.id, j).c_str(), resourcesCtx.get_member_qualified_name(uniformRes.type_id, j).c_str(), resourcesCtx.get_fallback_member_name(j).c_str()
                       , uniformRes.id, j
@@ -361,8 +359,8 @@ static void fillUniformInfo(const std::string& /*shaderPath*/,
                       , subVarSize
                       , static_cast<uint32_t>(resourcesCtx.get_declared_struct_member_size(variableType, j))
                       , resourcesCtx.type_struct_member_offset(variableType, j)
-                      /*, resourcesCtx.type_struct_member_array_stride(variableType, j)* /
-                      , resourcesCtx.type_struct_member_matrix_stride(variableType, j)
+                      //, resourcesCtx.type_struct_member_array_stride(variableType, j)
+                      //, resourcesCtx.type_struct_member_matrix_stride(variableType, j)
                       , resourcesCtx.get_member_decoration_bitset(uniformRes.id, j).get_lower()
                       , binding
                       , descriptorSet
@@ -376,18 +374,20 @@ static void fillUniformInfo(const std::string& /*shaderPath*/,
                     continue;
                 }
             }
+            */
         }
         else {
             uint32_t variableSize = (variableType.width / 8 + (variableType.width % 8 ? 1 : 0)) * variableType.vecsize * variableType.columns; // in bytes
-            VkFormat variableFormat = SPIRTypeToVulkanFormat(variableType);
+            //VkFormat variableFormat = SPIRTypeToVulkanFormat(variableType);
 
-            qInfo("Uniform: %s id:%d type:%d base:%d size:%d binding:%d descriptorSet:%d"
-                  , uniformRes.name.c_str(), uniformRes.id, uniformRes.type_id, uniformRes.base_type_id
-                  , variableSize
-                  , binding
-                  , descriptorSet);
+            bindingInfo.byteSize = variableSize; //TODO SPIRV-Cross calculate it differently look at get_declared_struct_size inside !
+
+            //qInfo("Uniform: %s id:%d type:%d base:%d size:%d binding:%d descriptorSet:%d"
+            //      , uniformRes.name.c_str(), uniformRes.id, uniformRes.type_id, uniformRes.base_type_id
+            //      , variableSize
+            //      , binding
+            //      , descriptorSet);
         }
-        */
     }
 }
 
@@ -418,7 +418,10 @@ bool PipelineManager::createLayoutAndPoolForDescriptorSets(const std::vector<con
         }
         const auto& descrSetsSpecs = shaderInfo->uniformInfo.descriptorSetsSpecifications;
         for (size_t descriptorSetIdx = 0; descriptorSetIdx < descrSetsSpecs.size(); ++descriptorSetIdx) {
-            maxBindings[descriptorSetIdx] = std::max(maxBindings[descriptorSetIdx], descrSetsSpecs[descriptorSetIdx].size());
+            for (size_t bindingIdx = 0; bindingIdx < descrSetsSpecs[descriptorSetIdx].size(); ++bindingIdx) {
+                size_t bindingNo = descrSetsSpecs[descriptorSetIdx][bindingIdx].vdslbInfo.binding;
+                maxBindings[descriptorSetIdx] = std::max(maxBindings[descriptorSetIdx], bindingNo + 1);
+            }
         }
     }
 
@@ -442,21 +445,22 @@ bool PipelineManager::createLayoutAndPoolForDescriptorSets(const std::vector<con
             const auto& srcDescrSetSpecs = srcDescrSetsSpecs[descriptorSetIdx];
             auto& dstDescrSetSpecs = allShadersDescrSetsSpecs[descriptorSetIdx];
             for (size_t bindingIdx = 0; bindingIdx < srcDescrSetSpecs.size(); ++bindingIdx) {
-                const VkDescriptorSetLayoutBinding& srcDslb = srcDescrSetSpecs[bindingIdx];
-                VkDescriptorSetLayoutBinding& dstDslb = dstDescrSetSpecs[bindingIdx];
+                const BindingInfo& srcBinding = srcDescrSetSpecs[bindingIdx];
+                BindingInfo& dstBinding = dstDescrSetSpecs[srcBinding.vdslbInfo.binding];
 
-                assert(srcDslb.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && "Invalid descriptor type!"); // TODO allow for different type
+                assert(srcBinding.vdslbInfo.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && "Invalid descriptor type!"); // TODO allow for different type
 
-                dstDslb.binding = srcDslb.binding;
-                dstDslb.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                if (dstDslb.descriptorCount == 0) {
-                    dstDslb.descriptorCount = srcDslb.descriptorCount;
+                dstBinding.vdslbInfo.binding = srcBinding.vdslbInfo.binding;
+                dstBinding.vdslbInfo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                if (dstBinding.vdslbInfo.descriptorCount == 0) {
+                    dstBinding.vdslbInfo.descriptorCount = srcBinding.vdslbInfo.descriptorCount;
                 }
                 else {
-                    assert(srcDslb.descriptorCount == dstDslb.descriptorCount && "Two different array size of the same binding on different stage!");
+                    assert(srcBinding.vdslbInfo.descriptorCount == dstBinding.vdslbInfo.descriptorCount && "Two different array size of the same binding on different stage!");
                 }
-                dstDslb.stageFlags |= srcDslb.stageFlags;
-                dstDslb.pImmutableSamplers = nullptr;
+                dstBinding.vdslbInfo.stageFlags |= srcBinding.vdslbInfo.stageFlags;
+                dstBinding.vdslbInfo.pImmutableSamplers = nullptr;
+                dstBinding.byteSize = srcBinding.byteSize;
             }
         }
     }
@@ -471,11 +475,15 @@ bool PipelineManager::createLayoutAndPoolForDescriptorSets(const std::vector<con
     //
     std::vector<VkDescriptorSetLayout> layouts(allShadersDescrSetsSpecs.size());
     for (size_t descriptorSetIdx = 0; descriptorSetIdx < allShadersDescrSetsSpecs.size(); ++descriptorSetIdx) {
+        std::vector<VkDescriptorSetLayoutBinding> bindings(allShadersDescrSetsSpecs[descriptorSetIdx].size());
+        for (size_t bindingIdx = 0; bindingIdx < bindings.size(); ++bindingIdx) {
+            bindings[bindingIdx] = allShadersDescrSetsSpecs[descriptorSetIdx][bindingIdx].vdslbInfo;
+        }
         VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo = {};
         descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         //descriptorSetLayoutInfo.flags = 0;
         descriptorSetLayoutInfo.bindingCount = static_cast<uint32_t>(allShadersDescrSetsSpecs[descriptorSetIdx].size());
-        descriptorSetLayoutInfo.pBindings = allShadersDescrSetsSpecs[descriptorSetIdx].data();
+        descriptorSetLayoutInfo.pBindings = bindings.data();
 
         result = mDevFuncs->vkCreateDescriptorSetLayout(mDevice, &descriptorSetLayoutInfo, nullptr, &pipelineInfo.descriptorSetInfo[descriptorSetIdx].layout);
         if (result != VK_SUCCESS) {
