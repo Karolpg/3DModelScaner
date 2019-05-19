@@ -77,8 +77,6 @@ public:
 
     static VkFormat chooseFloatFormat(uint32_t fieldBitWidth, uint32_t fieldCount);
     static VkFormat chooseIntFormat(uint32_t fieldBitWidth, uint32_t fieldCount, bool sign);
-
-    VkDescriptorSetLayout descriptorSetLayoutTempSolution;
 protected:
 
     struct VertexInfo{

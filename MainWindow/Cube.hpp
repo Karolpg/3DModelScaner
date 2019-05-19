@@ -24,30 +24,47 @@ SOFTWARE.
 
 #pragma once
 
-#include "BufferDescr.hpp"
-#include <glm/glm.hpp>
-#include <memory>
-#include <vector>
-#include "PipelineManager.hpp"
+#include <IRenderable.hpp>
+#include <string>
+#include <vulkan/vulkan.h>
+#include "GraphicObject.hpp"
 
+class QVulkanInstance;
 class QVulkanDeviceFunctions;
 
-struct GraphicObject
+class Cube : public IRenderable
 {
-    std::unique_ptr<BufferDescr> vertices;
-    //TODO add something describing vertices attributes
+public:
 
-    std::unique_ptr<BufferDescr> indices;
-    VkIndexType    indexType;
-    uint32_t       indicesCount;
+    Cube(QVulkanInstance &vulkanInstance, QVulkanDeviceFunctions &devFuncs,
+         VkDevice device, VkPhysicalDevice physicalDev);
+    ~Cube() override;
 
-    std::unique_ptr<BufferDescr> uniforms;
-    std::vector<std::vector<VkDescriptorBufferInfo>> uniformMapping; // key1 - descr set id, key2 - binding
+    const char* id() const override;
+    const char* description() const override;
 
-    const PipelineManager::PipelineInfo* pipelineInfo;
+    void initResource() override;
+    void initPipeline(PipelineManager* pipelineMgr) override;
+    void update() override;
+    void draw(VkCommandBuffer cmdBuf) override;
+    void releasePipeline() override;
+    void releaseResource() override;
 
-    glm::mat4x4    modelMtx;
+    void setViewMtx(const glm::mat4x4 *viewMtx) { mViewMtx = viewMtx;}
+    void setProjMtx(const glm::mat4x4 *projMtx) { mProjMtx = projMtx;}
+protected:
+    void updateUniformBuffer();
 
-    void connectResourceWithUniformSets(QVulkanDeviceFunctions &devFuncs, VkDevice device);
+protected:
+    std::string mId;
+    std::string mDescr;
+    GraphicObject mGo;
+
+    QVulkanInstance &mVulkanInstance;
+    QVulkanDeviceFunctions &mDevFuncs;
+    VkDevice mDevice;
+    VkPhysicalDevice mPhysicalDev;
+
+    const glm::mat4x4 *mViewMtx;
+    const glm::mat4x4 *mProjMtx;
 };
-

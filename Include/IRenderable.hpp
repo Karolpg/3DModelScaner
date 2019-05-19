@@ -24,30 +24,22 @@ SOFTWARE.
 
 #pragma once
 
-#include "BufferDescr.hpp"
-#include <glm/glm.hpp>
 #include <memory>
-#include <vector>
-#include "PipelineManager.hpp"
+#include <vulkan/vulkan.h>
 
-class QVulkanDeviceFunctions;
+class PipelineManager;
 
-struct GraphicObject
+class IRenderable
 {
-    std::unique_ptr<BufferDescr> vertices;
-    //TODO add something describing vertices attributes
+public:
+    virtual ~IRenderable() {}
+    virtual const char* id() const = 0;                 /// sth to identify instance
+    virtual const char* description() const = 0;        /// some full description of instance
 
-    std::unique_ptr<BufferDescr> indices;
-    VkIndexType    indexType;
-    uint32_t       indicesCount;
-
-    std::unique_ptr<BufferDescr> uniforms;
-    std::vector<std::vector<VkDescriptorBufferInfo>> uniformMapping; // key1 - descr set id, key2 - binding
-
-    const PipelineManager::PipelineInfo* pipelineInfo;
-
-    glm::mat4x4    modelMtx;
-
-    void connectResourceWithUniformSets(QVulkanDeviceFunctions &devFuncs, VkDevice device);
+    virtual void initResource() = 0;
+    virtual void initPipeline(PipelineManager* pipelineMgr) = 0;
+    virtual void update() = 0;
+    virtual void draw(VkCommandBuffer cmdBuf) = 0; // TODO change raw cmd buff with some kind of draw manager
+    virtual void releasePipeline() = 0;
+    virtual void releaseResource() = 0;
 };
-

@@ -41,10 +41,14 @@ PipelineManager::PipelineManager(QVulkanInstance &vulkanInstance,
     assert(mDevice && "Device should be valid!");
     mDevFuncs = vulkanInstance.deviceFunctions(mDevice);
     assert(mDevFuncs && "Device functions should be valid!");
+
+    qInfo("Creating pipeline manager: %p", this);
 }
 
 PipelineManager::~PipelineManager()
 {
+    qInfo("Destroying pipeline manager: %p", this);
+
     cleanUpShaders();
 
     std::for_each(mPipelines.begin(), mPipelines.end(),
