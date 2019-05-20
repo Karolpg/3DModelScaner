@@ -28,6 +28,8 @@ SOFTWARE.
 #include <vulkan/vulkan.h>
 
 class PipelineManager;
+class QVulkanInstance;
+class QVulkanDeviceFunctions;
 
 class IRenderable
 {
@@ -36,7 +38,10 @@ public:
     virtual const char* id() const = 0;                 /// sth to identify instance
     virtual const char* description() const = 0;        /// some full description of instance
 
-    virtual void initResource() = 0;
+    virtual void initResource(QVulkanInstance *vulkanInstance,
+                              QVulkanDeviceFunctions *devFuncs,
+                              VkDevice device,
+                              VkPhysicalDevice physicalDev) = 0;
     virtual void initPipeline(PipelineManager* pipelineMgr) = 0;
     virtual void update() = 0;
     virtual void draw(VkCommandBuffer cmdBuf) = 0; // TODO change raw cmd buff with some kind of draw manager

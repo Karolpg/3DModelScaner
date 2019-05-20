@@ -36,14 +36,16 @@ class Cube : public IRenderable
 {
 public:
 
-    Cube(QVulkanInstance &vulkanInstance, QVulkanDeviceFunctions &devFuncs,
-         VkDevice device, VkPhysicalDevice physicalDev);
+    Cube(bool useTexture = false);
     ~Cube() override;
 
     const char* id() const override;
     const char* description() const override;
 
-    void initResource() override;
+    void initResource(QVulkanInstance *vulkanInstance,
+                      QVulkanDeviceFunctions *devFuncs,
+                      VkDevice device,
+                      VkPhysicalDevice physicalDev) override;
     void initPipeline(PipelineManager* pipelineMgr) override;
     void update() override;
     void draw(VkCommandBuffer cmdBuf) override;
@@ -60,11 +62,13 @@ protected:
     std::string mDescr;
     GraphicObject mGo;
 
-    QVulkanInstance &mVulkanInstance;
-    QVulkanDeviceFunctions &mDevFuncs;
+    QVulkanInstance *mVulkanInstance;
+    QVulkanDeviceFunctions *mDevFuncs;
     VkDevice mDevice;
     VkPhysicalDevice mPhysicalDev;
 
     const glm::mat4x4 *mViewMtx;
     const glm::mat4x4 *mProjMtx;
+
+    bool mUseTexture;
 };

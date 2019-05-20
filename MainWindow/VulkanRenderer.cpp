@@ -47,11 +47,11 @@ void VulkanRenderer::initResources()
     mDevFuncs = mParent.vulkanInstance()->deviceFunctions(mParent.device());
     assert(mDevFuncs && "Device functions should to be valid here!!!");
 
-    Cube* cube = new Cube(*mParent.vulkanInstance(), *mDevFuncs, mParent.device(), mParent.physicalDevice()); // TODO move this allocation somewhere else
+    Cube* cube = new Cube(false); // TODO move this allocation somewhere else
     cube->setProjMtx(&mProjMtx);
     cube->setViewMtx(&mViewMtx);
     mCube = std::unique_ptr<IRenderable>(cube);
-    mCube->initResource();
+    mCube->initResource(mParent.vulkanInstance(), mDevFuncs, mParent.device(), mParent.physicalDevice());
 }
 
 void VulkanRenderer::initSwapChainResources()

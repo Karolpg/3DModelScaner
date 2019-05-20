@@ -34,8 +34,7 @@ class QVulkanDeviceFunctions;
 
 struct GraphicObject
 {
-    std::unique_ptr<BufferDescr> vertices;
-    //TODO add something describing vertices attributes
+    std::vector<std::unique_ptr<BufferDescr>> vertices; // vector index is binding of vertex attribute
 
     std::unique_ptr<BufferDescr> indices;
     VkIndexType    indexType;

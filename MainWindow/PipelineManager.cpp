@@ -255,9 +255,11 @@ static void fillShaderInput(const std::string& shaderPath,
                             const spirv_cross::Compiler& resourcesCtx,
                             const spirv_cross::ShaderResources& resources,
                             std::vector<VkVertexInputBindingDescription>& vertexBindings,
-                            std::vector<VkVertexInputAttributeDescription>& vertexAtrDesc)
+                            std::vector<VkVertexInputAttributeDescription>& vertexAtrDesc,
+                            const std::map<PipelineManager::AdditionalParameters, QVariant> &parameters)
 {
-    bool isSeparate = false; // provide somehow choise from outside
+    auto separatedParam = parameters.find(PipelineManager::ApSeparatedAttributes);
+    bool isSeparate = separatedParam == parameters.end() ? false : separatedParam->second.toBool();
     uint32_t inputStructureSize = 0;
     for (uint32_t i = 0; i < resources.stage_inputs.size(); ++i) {
         const spirv_cross::Resource& inputRes = resources.stage_inputs[i];
@@ -540,7 +542,7 @@ bool PipelineManager::createLayoutAndPoolForDescriptorSets(const std::vector<con
     return true;
 }
 
-const PipelineManager::ShaderInfo* PipelineManager::getShader(const std::string& shaderPath, VkShaderStageFlagBits stage)
+const PipelineManager::ShaderInfo* PipelineManager::getShader(const std::string& shaderPath, VkShaderStageFlagBits stage, const std::map<AdditionalParameters, QVariant> &parameters)
 {
     auto foundIt = mShaders.find(shaderPath);
     if (foundIt != mShaders.end()) {
@@ -609,7 +611,8 @@ const PipelineManager::ShaderInfo* PipelineManager::getShader(const std::string&
     // Input
     //
     fillShaderInput(shaderPath, glsl, resources,
-                    shaderInfo->vertexInfo.vertexBindings, shaderInfo->vertexInfo.vertexAtrDesc);
+                    shaderInfo->vertexInfo.vertexBindings, shaderInfo->vertexInfo.vertexAtrDesc,
+                    parameters);
 
     //
     // Uniform info
@@ -627,7 +630,8 @@ const PipelineManager::PipelineInfo* PipelineManager::getPipeline(const std::str
                                                                   const std::string& tesselationControlShaderPath,
                                                                   const std::string& tesselationEvaluationShaderPath,
                                                                   const std::string& geometryShaderPath,
-                                                                  const std::string& fragmentShaderPath)
+                                                                  const std::string& fragmentShaderPath,
+                                                                  const std::map<AdditionalParameters, QVariant> &parameters)
 {
     std::string key = vertexShaderPath + tesselationControlShaderPath + tesselationEvaluationShaderPath + geometryShaderPath + fragmentShaderPath;
 
@@ -639,11 +643,11 @@ const PipelineManager::PipelineInfo* PipelineManager::getPipeline(const std::str
     VkResult result = VK_SUCCESS;
 
 
-    const ShaderInfo* vertexShader = getShader(vertexShaderPath, VK_SHADER_STAGE_VERTEX_BIT);
-    const ShaderInfo* tesselationControlShader = getShader(tesselationControlShaderPath, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT);
-    const ShaderInfo* tesselationEvaluationShader = getShader(tesselationEvaluationShaderPath, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT);
-    const ShaderInfo* geometryShader = getShader(geometryShaderPath, VK_SHADER_STAGE_GEOMETRY_BIT);
-    const ShaderInfo* fragmentShader = getShader(fragmentShaderPath, VK_SHADER_STAGE_FRAGMENT_BIT);
+    const ShaderInfo* vertexShader = getShader(vertexShaderPath, VK_SHADER_STAGE_VERTEX_BIT, parameters);
+    const ShaderInfo* tesselationControlShader = getShader(tesselationControlShaderPath, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, parameters);
+    const ShaderInfo* tesselationEvaluationShader = getShader(tesselationEvaluationShaderPath, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, parameters);
+    const ShaderInfo* geometryShader = getShader(geometryShaderPath, VK_SHADER_STAGE_GEOMETRY_BIT, parameters);
+    const ShaderInfo* fragmentShader = getShader(fragmentShaderPath, VK_SHADER_STAGE_FRAGMENT_BIT, parameters);
 
     std::vector<const ShaderInfo *> shaderInfos;
     shaderInfos.push_back(vertexShader);

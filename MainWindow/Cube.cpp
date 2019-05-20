@@ -28,12 +28,14 @@ SOFTWARE.
 #include <QVulkanDeviceFunctions>
 
 
-Cube::Cube(QVulkanInstance &vulkanInstance, QVulkanDeviceFunctions &devFuncs,
-           VkDevice device, VkPhysicalDevice physicalDev)
-    : mVulkanInstance(vulkanInstance)
-    , mDevFuncs(devFuncs)
-    , mDevice(device)
-    , mPhysicalDev(physicalDev)
+Cube::Cube(bool useTexture)
+    : mVulkanInstance(nullptr)
+    , mDevFuncs(nullptr)
+    , mDevice(nullptr)
+    , mPhysicalDev(nullptr)
+    , mViewMtx(nullptr)
+    , mProjMtx(nullptr)
+    , mUseTexture(useTexture)
 {
     static std::atomic_uint counter;
     uint32_t localId = ++counter;
@@ -67,8 +69,23 @@ struct Uniform {
 };
 }
 
-void Cube::initResource()
+void Cube::initResource(QVulkanInstance *vulkanInstance,
+                        QVulkanDeviceFunctions *devFuncs,
+                        VkDevice device,
+                        VkPhysicalDevice physicalDev)
 {
+    mVulkanInstance = vulkanInstance;
+    assert(mVulkanInstance);
+
+    mDevFuncs = devFuncs;
+    assert(mDevFuncs);
+
+    mDevice = device;
+    assert(mDevice);
+
+    mPhysicalDev = physicalDev;
+    assert(mPhysicalDev);
+
     static const float cubeVertices[] = {
         -1.0f,-1.0f,-1.0f, //0               2--------- 3
         -1.0f,-1.0f, 1.0f, //1            /  .      /   |
@@ -106,15 +123,21 @@ void Cube::initResource()
         5,0,1,    5,1,6, //down
     };
 
-    mGo.vertices = std::unique_ptr<BufferDescr>(new BufferDescr(mVulkanInstance, mDevice, mPhysicalDev));
-    mGo.vertices->createBuffer(cubeVertices, sizeof(cubeVertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-    mGo.indices = std::unique_ptr<BufferDescr>(new BufferDescr(mVulkanInstance, mDevice, mPhysicalDev));
+    mGo.vertices.push_back(std::unique_ptr<BufferDescr>(new BufferDescr(*mVulkanInstance, mDevice, mPhysicalDev)));
+    mGo.vertices[0]->createBuffer(cubeVertices, sizeof(cubeVertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+
+    if (mUseTexture) {
+        mGo.vertices.push_back(std::unique_ptr<BufferDescr>(new BufferDescr(*mVulkanInstance, mDevice, mPhysicalDev)));
+        mGo.vertices[1]->createBuffer(cubeUV, sizeof(cubeUV), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    }
+
+    mGo.indices = std::unique_ptr<BufferDescr>(new BufferDescr(*mVulkanInstance, mDevice, mPhysicalDev));
     mGo.indices->createBuffer(indices, sizeof(indices), VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
     mGo.indexType = VK_INDEX_TYPE_UINT16;
     mGo.indicesCount = sizeof(indices)/sizeof(indices[0]);
 
     ::Uniform uniformDefinition = {};
-    mGo.uniforms = std::unique_ptr<BufferDescr>(new BufferDescr(mVulkanInstance, mDevice, mPhysicalDev));
+    mGo.uniforms = std::unique_ptr<BufferDescr>(new BufferDescr(*mVulkanInstance, mDevice, mPhysicalDev));
     mGo.uniforms->createBuffer(&uniformDefinition, sizeof(uniformDefinition), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
     mGo.uniformMapping.resize(1); // one descriptor set
@@ -129,8 +152,16 @@ void Cube::initResource()
 
 void Cube::initPipeline(PipelineManager *pipelineMgr)
 {
-    mGo.pipelineInfo = pipelineMgr->getPipeline("../shaders/calc_position.vert.bin", "", "", "", "../shaders/gradient.frag.bin");
-    mGo.connectResourceWithUniformSets(mDevFuncs, mDevice);
+    if (mUseTexture) {
+        std::map<PipelineManager::AdditionalParameters, QVariant> parameter;
+        parameter[PipelineManager::ApSeparatedAttributes] = true;
+        mGo.pipelineInfo = pipelineMgr->getPipeline("../shaders/calc_position_uv.vert.bin", "", "", "", "../shaders/texture.frag.bin", parameter);
+    }
+    else {
+        mGo.pipelineInfo = pipelineMgr->getPipeline("../shaders/calc_position.vert.bin", "", "", "", "../shaders/gradient.frag.bin");
+    }
+
+    mGo.connectResourceWithUniformSets(*mDevFuncs, mDevice);
 }
 
 void Cube::update()
@@ -140,6 +171,7 @@ void Cube::update()
 
 void Cube::draw(VkCommandBuffer cmdBuf)
 {
+    assert(mDevFuncs);
     if (!mGo.pipelineInfo) {
         qWarning("%s does not contain pipelineInfo object!", mId.c_str());
         return;
@@ -150,28 +182,33 @@ void Cube::draw(VkCommandBuffer cmdBuf)
         return;
     }
 
-    mDevFuncs.vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, mGo.pipelineInfo->pipeline);
+    mDevFuncs->vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, mGo.pipelineInfo->pipeline);
 
     std::vector<VkDescriptorSet> descriptorSets(mGo.pipelineInfo->descriptorSetInfo.size());
     for (size_t descriptorSetIdx = 0; descriptorSetIdx < descriptorSets.size(); ++descriptorSetIdx) {
         descriptorSets[descriptorSetIdx] = mGo.pipelineInfo->descriptorSetInfo[descriptorSetIdx].descriptor;
     }
 
-    mDevFuncs.vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, mGo.pipelineInfo->pipelineLayout,
+    mDevFuncs->vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, mGo.pipelineInfo->pipelineLayout,
                                        0, static_cast<uint32_t>(descriptorSets.size()), descriptorSets.data(), //descriptor set info
                                        0, nullptr); //dynamic offset
 
     uint32_t firstBinding = 0;
-    std::array<VkBuffer, 1> vertexBuffers = {mGo.vertices->getBuffer()};
-    std::array<VkDeviceSize, 1>  offsets = {0};
-    static_assert(vertexBuffers.size() == offsets.size(), "This arrays have to be the same size!\n");
-    mDevFuncs.vkCmdBindVertexBuffers(cmdBuf, firstBinding, vertexBuffers.size(), vertexBuffers.data(), offsets.data());
+
+    std::vector<VkBuffer> vertexBuffers(mGo.vertices.size(), nullptr);
+    std::vector<VkDeviceSize> offsets(mGo.vertices.size(), 0);
+
+    for (size_t i = 0; i < mGo.vertices.size(); ++i) {
+        vertexBuffers[i] = mGo.vertices[i]->getBuffer();
+    }
+
+    mDevFuncs->vkCmdBindVertexBuffers(cmdBuf, firstBinding, static_cast<uint32_t>(vertexBuffers.size()), vertexBuffers.data(), offsets.data());
 
     VkDeviceSize indexOffset = 0;
-    mDevFuncs.vkCmdBindIndexBuffer(cmdBuf, mGo.indices->getBuffer(), indexOffset,  mGo.indexType);
+    mDevFuncs->vkCmdBindIndexBuffer(cmdBuf, mGo.indices->getBuffer(), indexOffset,  mGo.indexType);
 
     //vkCmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
-    mDevFuncs.vkCmdDrawIndexed(cmdBuf, mGo.indicesCount, 1, 0, 0, 0);
+    mDevFuncs->vkCmdDrawIndexed(cmdBuf, mGo.indicesCount, 1, 0, 0, 0);
 }
 
 void Cube::releasePipeline()
@@ -181,7 +218,7 @@ void Cube::releasePipeline()
 
 void Cube::releaseResource()
 {
-    mGo.vertices.release();
+    mGo.vertices.clear();
     mGo.indices.release();
     mGo.indicesCount = 0;
     mGo.uniforms.release();
@@ -190,6 +227,7 @@ void Cube::releaseResource()
 
 void Cube::updateUniformBuffer()
 {
+    assert(mDevFuncs);
     if (!mViewMtx || !mProjMtx) {
         qWarning("%s does not have valid view or projection matrix!", mId.c_str());
         return;
@@ -197,7 +235,7 @@ void Cube::updateUniformBuffer()
     VkDeviceSize offset = 0;
     VkMemoryMapFlags mappingFlags = 0; // reserved for future use
     void* deviceMemMappedPtr = nullptr;
-    mDevFuncs.vkMapMemory(mDevice, mGo.uniforms->getMem(), offset, sizeof(Uniform), mappingFlags, &deviceMemMappedPtr);
+    mDevFuncs->vkMapMemory(mDevice, mGo.uniforms->getMem(), offset, sizeof(Uniform), mappingFlags, &deviceMemMappedPtr);
     char* deviceMemMapped = static_cast<char*>(deviceMemMappedPtr);
 
     memcpy(deviceMemMapped + offsetof(Uniform, viewMtx), &((*mViewMtx)[0]), sizeof(decltype(*mViewMtx)));
@@ -207,5 +245,5 @@ void Cube::updateUniformBuffer()
     glm::mat4x4 mvpMtx = (*mProjMtx) * (*mViewMtx) * mGo.modelMtx;
     memcpy(deviceMemMapped + offsetof(Uniform, mvpMtx), &mvpMtx[0], sizeof(mvpMtx));
 
-    mDevFuncs.vkUnmapMemory(mDevice, mGo.uniforms->getMem());
+    mDevFuncs->vkUnmapMemory(mDevice, mGo.uniforms->getMem());
 }

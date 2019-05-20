@@ -29,6 +29,7 @@ SOFTWARE.
 #include <map>
 #include <string>
 #include <QSize>
+#include <QVariant> //TODO exchange with c++17 std::variant
 
 class QVulkanInstance;
 class QVulkanDeviceFunctions;
@@ -36,6 +37,10 @@ class QVulkanDeviceFunctions;
 class PipelineManager
 {
 public:
+    enum AdditionalParameters {
+        ApSeparatedAttributes, // [bool] 0 - interleaved (default); 1 - separated
+    };
+
     struct BindingInfo {
         VkDescriptorSetLayoutBinding vdslbInfo;
         size_t byteSize;
@@ -70,7 +75,8 @@ public:
                                     const std::string& tesselationControlShaderPath,
                                     const std::string& tesselationEvaluationShaderPath,
                                     const std::string& geometryShaderPath,
-                                    const std::string& fragmentShaderPath);
+                                    const std::string& fragmentShaderPath,
+                                    const std::map<AdditionalParameters, QVariant> &parameters = std::map<AdditionalParameters, QVariant>());
 
     void cleanUpShaders();
 
@@ -95,7 +101,7 @@ protected:
     };
 
     //VkShaderModule createShader(const char* shaderStr, uint32_t shaderLen, int shadercShaderKindEnumVal);
-    const ShaderInfo* getShader(const std::string& shaderPath, VkShaderStageFlagBits stage);
+    const ShaderInfo* getShader(const std::string& shaderPath, VkShaderStageFlagBits stage, const std::map<AdditionalParameters, QVariant> &parameters);
     bool createLayoutAndPoolForDescriptorSets(const std::vector<const ShaderInfo*>& shaderInfos,
                                               PipelineInfo& pipelineInfo);
 
