@@ -24,32 +24,15 @@ SOFTWARE.
 
 #pragma once
 
-#include "BufferDescr.hpp"
-#include <glm/glm.hpp>
+#include "ImageDescr.hpp"
+#include "ImageViewDescr.hpp"
+#include "SamplerDescr.hpp"
 #include <memory>
-#include <vector>
-#include "PipelineManager.hpp"
-#include "Texture.hpp"
 
-class QVulkanDeviceFunctions;
-
-struct GraphicObject
+struct Texture
 {
-    std::vector<std::unique_ptr<BufferDescr>> vertices; // vector index is binding of vertex attribute ( vertices[binding] )
-
-    std::unique_ptr<BufferDescr> indices;
-    VkIndexType    indexType;
-    uint32_t       indicesCount;
-
-    std::unique_ptr<BufferDescr> uniforms;
-    std::vector<std::vector<QVariant>> uniformMapping; // key1 - descr set id, key2 - binding  ( uniformMapping[descrSet][binding] = VkDescriptorBufferInfo|VkDescriptorImageInfo)
-
-    std::vector<Texture> textures;
-
-    const PipelineManager::PipelineInfo* pipelineInfo;
-
-    glm::mat4x4    modelMtx;
-
-    void connectResourceWithUniformSets(QVulkanDeviceFunctions &devFuncs, VkDevice device);
+    std::unique_ptr<ImageDescr>       image;
+    std::unique_ptr<ImageViewDescr>   view;
+    std::unique_ptr<SamplerDescr>     sampler;
 };
 

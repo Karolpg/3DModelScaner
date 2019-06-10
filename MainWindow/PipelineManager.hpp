@@ -60,6 +60,8 @@ public:
         VkDescriptorPool               descriptorPool;
     };
 
+    typedef std::vector<std::vector<BindingInfo>> DescriptorSetsSpecifications; // DescriptorSetsSpecifications[ descriptorSet ][ bindingIdx ]
+
     PipelineManager(QVulkanInstance &vulkanInstance,
                     VkDevice device,
                     const QSize& frameSize,
@@ -91,19 +93,36 @@ protected:
     };
 
     struct UniformInfo{
-        std::vector<std::vector<BindingInfo>> descriptorSetsSpecifications; // descriptorSetSpecifications[ descriptorSet ][ bindingIdx ]
+        DescriptorSetsSpecifications descriptorSetsSpecifications; // descriptorSetSpecifications[ descriptorSet ][ bindingIdx ]
+    };
+
+    struct SamplerInfo{
+        DescriptorSetsSpecifications descriptorSetsSpecifications; // descriptorSetSpecifications[ descriptorSet ][ bindingIdx ]
     };
 
     struct ShaderInfo {
         VkShaderModule shader;
         VertexInfo vertexInfo;
         UniformInfo uniformInfo;
+        SamplerInfo samplerInfo;
     };
 
     //VkShaderModule createShader(const char* shaderStr, uint32_t shaderLen, int shadercShaderKindEnumVal);
     const ShaderInfo* getShader(const std::string& shaderPath, VkShaderStageFlagBits stage, const std::map<AdditionalParameters, QVariant> &parameters);
     bool createLayoutAndPoolForDescriptorSets(const std::vector<const ShaderInfo*>& shaderInfos,
                                               PipelineInfo& pipelineInfo);
+
+    template <VkDescriptorType descrType>
+    const DescriptorSetsSpecifications& getDescriptorSetSpec(const PipelineManager::ShaderInfo &shaderInfos);
+
+    template <VkDescriptorType descrType>
+    size_t getMaxDescriptorSet(const std::vector<const PipelineManager::ShaderInfo *> &shaderInfos);
+
+    template <VkDescriptorType descrType>
+    void fillMaxDescriptorSetBindings(const std::vector<const PipelineManager::ShaderInfo *> &shaderInfos, std::vector<size_t>& maxBindings);
+
+    template <VkDescriptorType descrType>
+    void fillDescriptorSetBindingsInfo(const std::vector<const PipelineManager::ShaderInfo *> &shaderInfos, DescriptorSetsSpecifications& infos);
 
     std::map<std::string, ShaderInfo> mShaders;
     std::map<std::string, PipelineInfo> mPipelines;

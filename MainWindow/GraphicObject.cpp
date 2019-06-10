@@ -61,12 +61,18 @@ void GraphicObject::connectResourceWithUniformSets(QVulkanDeviceFunctions &devFu
 
         for (size_t bindingIdx = 0; bindingIdx < dsi.bindingInfo.size(); ++bindingIdx) {
             assert(bindingIdx == dsi.bindingInfo[bindingIdx].vdslbInfo.binding);
-            if (uniformMapping[descriptorSetIdx][bindingIdx].range != dsi.bindingInfo[bindingIdx].byteSize) { // check if it was correctly provided/created in app and shader
-                qWarning("Inconsistent data. Descriptor = %d binding = %d objectDataSize = %d, shaderDataSize = %d"
-                         , static_cast<uint32_t>(descriptorSetIdx)
-                         , static_cast<uint32_t>(bindingIdx)
-                         , static_cast<uint32_t>(uniformMapping[descriptorSetIdx][bindingIdx].range)
-                         , static_cast<uint32_t>(dsi.bindingInfo[bindingIdx].byteSize));
+            if (dsi.bindingInfo[bindingIdx].vdslbInfo.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
+                const VkDescriptorBufferInfo* dbi = reinterpret_cast<const VkDescriptorBufferInfo*>(uniformMapping[descriptorSetIdx][bindingIdx].data());
+                if (dbi->range != dsi.bindingInfo[bindingIdx].byteSize) { // check if it was correctly provided/created in app and shader
+                    qWarning("Inconsistent data. Descriptor = %d binding = %d objectDataSize = %d, shaderDataSize = %d"
+                             , static_cast<uint32_t>(descriptorSetIdx)
+                             , static_cast<uint32_t>(bindingIdx)
+                             , static_cast<uint32_t>(dbi->range)
+                             , static_cast<uint32_t>(dsi.bindingInfo[bindingIdx].byteSize));
+                }
+            }
+            else if (dsi.bindingInfo[bindingIdx].vdslbInfo.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
+                //const VkDescriptorImageInfo* dii = reinterpret_cast<const VkDescriptorImageInfo*>(uniformMapping[descriptorSetIdx][bindingIdx].data());
             }
         }
     }
@@ -91,7 +97,15 @@ void GraphicObject::connectResourceWithUniformSets(QVulkanDeviceFunctions &devFu
             //assert(writeDs->descriptorCount == 1 && "Currently only one elemnt array available!");)
 
             writeDs->pImageInfo = nullptr;
-            writeDs->pBufferInfo = &uniformMapping[descriptorSetIdx][bindingIdx];
+            if (dsi.bindingInfo[bindingIdx].vdslbInfo.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
+                const VkDescriptorImageInfo* dii = reinterpret_cast<const VkDescriptorImageInfo*>(uniformMapping[descriptorSetIdx][bindingIdx].data());
+                writeDs->pImageInfo = dii;
+            }
+            writeDs->pBufferInfo = nullptr;
+            if (dsi.bindingInfo[bindingIdx].vdslbInfo.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
+                const VkDescriptorBufferInfo* dbi = reinterpret_cast<const VkDescriptorBufferInfo*>(uniformMapping[descriptorSetIdx][bindingIdx].data());
+                writeDs->pBufferInfo = dbi;
+            }
             writeDs->pTexelBufferView = nullptr;
             ++writeDs;
         }

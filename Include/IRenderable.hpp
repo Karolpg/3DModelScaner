@@ -44,6 +44,7 @@ public:
                               VkPhysicalDevice physicalDev) = 0;
     virtual void initPipeline(PipelineManager* pipelineMgr) = 0;
     virtual void update() = 0;
+    virtual void setupBarrier(VkCommandBuffer cmdBuf) = 0;
     virtual void draw(VkCommandBuffer cmdBuf) = 0; // TODO change raw cmd buff with some kind of draw manager
     virtual void releasePipeline() = 0;
     virtual void releaseResource() = 0;

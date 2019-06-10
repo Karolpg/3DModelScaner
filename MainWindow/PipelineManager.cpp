@@ -388,41 +388,93 @@ static void fillUniformInfo(const std::string& shaderPath,
 
             bindingInfo.byteSize = variableSize; //TODO SPIRV-Cross calculate it differently look at get_declared_struct_size inside !
 
-            //qInfo("Uniform: %s id:%d type:%d base:%d size:%d binding:%d descriptorSet:%d"
-            //      , uniformRes.name.c_str(), uniformRes.id, uniformRes.type_id, uniformRes.base_type_id
-            //      , variableSize
-            //      , binding
-            //      , descriptorSet);
+            qInfo("Uniform: %s id:%d type:%d base:%d size:%d binding:%d descriptorSet:%d"
+                  , uniformRes.name.c_str(), uniformRes.id, uniformRes.type_id, uniformRes.base_type_id
+                  , variableSize
+                  , binding
+                  , descriptorSet);
         }
     }
 }
 
-bool PipelineManager::createLayoutAndPoolForDescriptorSets(const std::vector<const ShaderInfo *> &shaderInfos,
-                                                           PipelineInfo &pipelineInfo)
-{
-    VkResult result = VK_SUCCESS;
 
-    //
-    // Pick max size to not doing unnecessary reallocations for descriptor set level
-    //
+static void fillSamlerInfo(const std::string& shaderPath,
+                           VkShaderStageFlagBits stage,
+                           const spirv_cross::Compiler& resourcesCtx,
+                           const spirv_cross::ShaderResources& resources,
+                           std::vector<std::vector<PipelineManager::BindingInfo>>& descriptorSetsSpecifications)
+{
+    for (uint32_t i = 0; i < resources.sampled_images.size(); ++i) {
+        const spirv_cross::Resource& sampledRes = resources.sampled_images[i];
+        spirv_cross::SPIRType variableType = resourcesCtx.get_type(sampledRes.type_id);
+
+        uint32_t binding = resourcesCtx.get_decoration(sampledRes.id, spv::DecorationBinding); //if not parameter provided then 0
+        uint32_t descriptorSet = resourcesCtx.get_decoration(sampledRes.id, spv::DecorationDescriptorSet);
+
+        uint32_t arraySize = 1;
+        for (uint32_t j = 0; j < variableType.array.size(); ++j) {
+            arraySize += arraySize * variableType.array[j];
+        }
+
+        if (descriptorSetsSpecifications.size() <= descriptorSet) {
+            descriptorSetsSpecifications.resize(descriptorSet + 1); // assume that there will be no empty descriptor set, if not then change it on the map
+        }
+        descriptorSetsSpecifications[descriptorSet].push_back(PipelineManager::BindingInfo());
+        PipelineManager::BindingInfo& bindingInfo = descriptorSetsSpecifications[descriptorSet].back();
+
+        //
+        // Layout of the descriptor set - how it will be used in shader
+        //
+        bindingInfo.vdslbInfo.binding = binding; //start from binding
+        bindingInfo.vdslbInfo.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        bindingInfo.vdslbInfo.descriptorCount = arraySize; // for arrays
+        bindingInfo.vdslbInfo.stageFlags = stage;
+        bindingInfo.vdslbInfo.pImmutableSamplers = nullptr;
+
+        qInfo("Sampled: %s id:%d type:%d base:%d binding:%d descriptorSet:%d arraySize:%d"
+              , sampledRes.name.c_str(), sampledRes.id, sampledRes.type_id, sampledRes.base_type_id
+              , binding
+              , descriptorSet
+              , arraySize);
+    }
+}
+
+static const PipelineManager::DescriptorSetsSpecifications EMPTY_DESCR_SETS_SPEC;
+
+template <VkDescriptorType descrType>
+const PipelineManager::DescriptorSetsSpecifications& PipelineManager::getDescriptorSetSpec(const PipelineManager::ShaderInfo &shaderInfos)
+{
+    if (descrType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
+        return shaderInfos.uniformInfo.descriptorSetsSpecifications;
+    }
+    else if (descrType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
+        return shaderInfos.samplerInfo.descriptorSetsSpecifications;
+    }
+    return EMPTY_DESCR_SETS_SPEC;
+}
+
+template <VkDescriptorType descrType>
+size_t PipelineManager::getMaxDescriptorSet(const std::vector<const PipelineManager::ShaderInfo *> &shaderInfos)
+{
     size_t maxDescriptorSets = 0;
     for (const ShaderInfo *shaderInfo : shaderInfos) {
         if (!shaderInfo) {
             continue;
         }
-        const auto& descrSetsSpecs = shaderInfo->uniformInfo.descriptorSetsSpecifications;
+        const DescriptorSetsSpecifications& descrSetsSpecs = getDescriptorSetSpec<descrType>(*shaderInfo);
         maxDescriptorSets = std::max(maxDescriptorSets, descrSetsSpecs.size());
     }
+    return maxDescriptorSets;
+}
 
-    //
-    // Pick max size to not doing unnecessary reallocations for binding level
-    //
-    std::vector<size_t> maxBindings(maxDescriptorSets);
+template <VkDescriptorType descrType>
+void PipelineManager::fillMaxDescriptorSetBindings(const std::vector<const PipelineManager::ShaderInfo *> &shaderInfos, std::vector<size_t>& maxBindings)
+{
     for (const ShaderInfo *shaderInfo : shaderInfos) {
         if (!shaderInfo) {
             continue;
         }
-        const auto& descrSetsSpecs = shaderInfo->uniformInfo.descriptorSetsSpecifications;
+        const DescriptorSetsSpecifications& descrSetsSpecs = getDescriptorSetSpec<descrType>(*shaderInfo);
         for (size_t descriptorSetIdx = 0; descriptorSetIdx < descrSetsSpecs.size(); ++descriptorSetIdx) {
             for (size_t bindingIdx = 0; bindingIdx < descrSetsSpecs[descriptorSetIdx].size(); ++bindingIdx) {
                 size_t bindingNo = descrSetsSpecs[descriptorSetIdx][bindingIdx].vdslbInfo.binding;
@@ -430,34 +482,27 @@ bool PipelineManager::createLayoutAndPoolForDescriptorSets(const std::vector<con
             }
         }
     }
+}
 
-    //
-    // Allocate memory
-    //
-    decltype (UniformInfo::descriptorSetsSpecifications) allShadersDescrSetsSpecs(maxDescriptorSets);
-    for (size_t i = 0; i < allShadersDescrSetsSpecs.size(); ++i) {
-        allShadersDescrSetsSpecs[i].resize(maxBindings[i]);
-    }
-
-    //
-    // Fill info from all shaders
-    //
+template <VkDescriptorType descrType>
+void PipelineManager::fillDescriptorSetBindingsInfo(const std::vector<const PipelineManager::ShaderInfo *> &shaderInfos, DescriptorSetsSpecifications& infos)
+{
     for (const ShaderInfo *shaderInfo : shaderInfos) {
         if (!shaderInfo) {
             continue;
         }
-        const auto& srcDescrSetsSpecs = shaderInfo->uniformInfo.descriptorSetsSpecifications;
+        const auto& srcDescrSetsSpecs = getDescriptorSetSpec<descrType>(*shaderInfo);
         for (size_t descriptorSetIdx = 0; descriptorSetIdx < srcDescrSetsSpecs.size(); ++descriptorSetIdx) {
             const auto& srcDescrSetSpecs = srcDescrSetsSpecs[descriptorSetIdx];
-            auto& dstDescrSetSpecs = allShadersDescrSetsSpecs[descriptorSetIdx];
+            auto& dstDescrSetSpecs = infos[descriptorSetIdx];
             for (size_t bindingIdx = 0; bindingIdx < srcDescrSetSpecs.size(); ++bindingIdx) {
                 const BindingInfo& srcBinding = srcDescrSetSpecs[bindingIdx];
                 BindingInfo& dstBinding = dstDescrSetSpecs[srcBinding.vdslbInfo.binding];
 
-                assert(srcBinding.vdslbInfo.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && "Invalid descriptor type!"); // TODO allow for different type
+                assert(srcBinding.vdslbInfo.descriptorType == descrType && "Invalid descriptor type!");
 
                 dstBinding.vdslbInfo.binding = srcBinding.vdslbInfo.binding;
-                dstBinding.vdslbInfo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                dstBinding.vdslbInfo.descriptorType = descrType;
                 if (dstBinding.vdslbInfo.descriptorCount == 0) {
                     dstBinding.vdslbInfo.descriptorCount = srcBinding.vdslbInfo.descriptorCount;
                 }
@@ -470,6 +515,41 @@ bool PipelineManager::createLayoutAndPoolForDescriptorSets(const std::vector<con
             }
         }
     }
+}
+
+bool PipelineManager::createLayoutAndPoolForDescriptorSets(const std::vector<const ShaderInfo *> &shaderInfos,
+                                                           PipelineInfo &pipelineInfo)
+{
+    VkResult result = VK_SUCCESS;
+
+    //
+    // Pick max size to not doing unnecessary reallocations for descriptor set level
+    //
+    size_t maxUniformDescrSets = getMaxDescriptorSet<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER>(shaderInfos);
+    size_t maxSamplerDescrSets = getMaxDescriptorSet<VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER>(shaderInfos);
+    size_t maxDescriptorSets = std::max(maxUniformDescrSets, maxSamplerDescrSets);
+
+    //
+    // Pick max size to not doing unnecessary reallocations for binding level
+    //
+    std::vector<size_t> maxBindings(maxDescriptorSets);
+    fillMaxDescriptorSetBindings<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER>(shaderInfos, maxBindings);
+    fillMaxDescriptorSetBindings<VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER>(shaderInfos, maxBindings);
+
+    //
+    // Allocate memory
+    // Descriptor set and binding numeration are shared between all shaders!
+    //
+    DescriptorSetsSpecifications allShadersDescrSetsSpecs(maxDescriptorSets);
+    for (size_t i = 0; i < allShadersDescrSetsSpecs.size(); ++i) {
+        allShadersDescrSetsSpecs[i].resize(maxBindings[i]);
+    }
+
+    //
+    // Fill info from all shaders
+    //
+    fillDescriptorSetBindingsInfo<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER>(shaderInfos, allShadersDescrSetsSpecs);
+    fillDescriptorSetBindingsInfo<VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER>(shaderInfos, allShadersDescrSetsSpecs);
 
     pipelineInfo.descriptorSetInfo.resize(allShadersDescrSetsSpecs.size());
     for (size_t i = 0; i < allShadersDescrSetsSpecs.size(); ++i) {
@@ -502,16 +582,28 @@ bool PipelineManager::createLayoutAndPoolForDescriptorSets(const std::vector<con
     //
     // Create descriptor POOL - container for batch of descriptorSets
     //
-    VkDescriptorPoolSize descriptorPoolSize;
-    descriptorPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptorPoolSize.descriptorCount = static_cast<uint32_t>(pipelineInfo.descriptorSetInfo.size()); // descriptorCount is the number of descriptors of that type to allocate.
+    std::map<VkDescriptorType, uint32_t> descrTypeToCount;
+    for (size_t descriptorSetIdx = 0; descriptorSetIdx < allShadersDescrSetsSpecs.size(); ++descriptorSetIdx) {
+        for (size_t bindingIdx = 0; bindingIdx < allShadersDescrSetsSpecs[descriptorSetIdx].size(); ++bindingIdx) {
+            const VkDescriptorSetLayoutBinding& dslbInfo = allShadersDescrSetsSpecs[descriptorSetIdx][bindingIdx].vdslbInfo;
+            descrTypeToCount[dslbInfo.descriptorType] += dslbInfo.descriptorCount;
+        }
+    }
+
+    std::vector<VkDescriptorPoolSize> descriptorPoolSizes(descrTypeToCount.size());
+    size_t descrPoolSizeCtr = 0;
+    for (const auto& pairValue : descrTypeToCount) {
+        descriptorPoolSizes[descrPoolSizeCtr].type = pairValue.first;
+        descriptorPoolSizes[descrPoolSizeCtr].descriptorCount = pairValue.second; // descriptorCount is the number of descriptors of that type to allocate.
+        ++descrPoolSizeCtr;
+    }
 
     VkDescriptorPoolCreateInfo descriptorPoolInfo = {};
     descriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     //maxSets is the maximum number of descriptor sets that can be allocated from the pool.
     descriptorPoolInfo.maxSets = static_cast<uint32_t>(pipelineInfo.descriptorSetInfo.size());
-    descriptorPoolInfo.poolSizeCount = 1;
-    descriptorPoolInfo.pPoolSizes = &descriptorPoolSize;
+    descriptorPoolInfo.poolSizeCount = static_cast<uint32_t>(descriptorPoolSizes.size());
+    descriptorPoolInfo.pPoolSizes = descriptorPoolSizes.data();
 
     result = mDevFuncs->vkCreateDescriptorPool(mDevice, &descriptorPoolInfo, nullptr, &pipelineInfo.descriptorPool);
     if (result != VK_SUCCESS) {
@@ -525,7 +617,7 @@ bool PipelineManager::createLayoutAndPoolForDescriptorSets(const std::vector<con
     std::vector<VkDescriptorSet> descriptors(layouts.size());
     VkDescriptorSetAllocateInfo uniformAllocateInfo = {};
     uniformAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    uniformAllocateInfo.descriptorPool =pipelineInfo.descriptorPool;
+    uniformAllocateInfo.descriptorPool = pipelineInfo.descriptorPool;
     uniformAllocateInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
     uniformAllocateInfo.pSetLayouts = layouts.data();
 
@@ -621,7 +713,7 @@ const PipelineManager::ShaderInfo* PipelineManager::getShader(const std::string&
     //
     // Samplers
     //
-    //TODO
+    fillSamlerInfo(shaderPath, stage, glsl, resources, shaderInfo->samplerInfo.descriptorSetsSpecifications);
 
     return shaderInfo;
 }

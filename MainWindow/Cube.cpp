@@ -27,6 +27,9 @@ SOFTWARE.
 #include <glm/ext.hpp>
 #include <QVulkanDeviceFunctions>
 
+#include "ImageDescr.hpp"
+#include "SamplerDescr.hpp"
+
 
 Cube::Cube(bool useTexture)
     : mVulkanInstance(nullptr)
@@ -67,7 +70,46 @@ struct Uniform {
     glm::mat4x4    projMtx;
     glm::mat4x4    modelMtx;
 };
+
+const char* qImgFormatToStr(QImage::Format format) {
+    switch (format) {
+        case QImage::Format_Invalid                : return "Invalid";
+        case QImage::Format_Mono                   : return "Mono";
+        case QImage::Format_MonoLSB                : return "MonoLSB";
+        case QImage::Format_Indexed8               : return "Indexed8";
+        case QImage::Format_RGB32                  : return "RGB32";
+        case QImage::Format_ARGB32                 : return "ARGB32";
+        case QImage::Format_ARGB32_Premultiplied   : return "ARGB32_Premultiplied";
+        case QImage::Format_RGB16                  : return "RGB16";
+        case QImage::Format_ARGB8565_Premultiplied : return "ARGB8565_Premultiplied";
+        case QImage::Format_RGB666                 : return "RGB666";
+        case QImage::Format_ARGB6666_Premultiplied : return "ARGB6666_Premultiplied";
+        case QImage::Format_RGB555                 : return "RGB555";
+        case QImage::Format_ARGB8555_Premultiplied : return "ARGB8555_Premultiplied";
+        case QImage::Format_RGB888                 : return "RGB888";
+        case QImage::Format_RGB444                 : return "RGB444";
+        case QImage::Format_ARGB4444_Premultiplied : return "ARGB4444_Premultiplied";
+        case QImage::Format_RGBX8888               : return "RGBX8888";
+        case QImage::Format_RGBA8888               : return "RGBA8888";
+        case QImage::Format_RGBA8888_Premultiplied : return "RGBA8888_Premultiplied";
+        case QImage::Format_BGR30                  : return "BGR30";
+        case QImage::Format_A2BGR30_Premultiplied  : return "A2BGR30_Premultiplied";
+        case QImage::Format_RGB30                  : return "RGB30";
+        case QImage::Format_A2RGB30_Premultiplied  : return "A2RGB30_Premultiplied";
+        case QImage::Format_Alpha8                 : return "Alpha8";
+        case QImage::Format_Grayscale8             : return "Grayscale8";
+        case QImage::Format_RGBX64                 : return "RGBX64";
+        case QImage::Format_RGBA64                 : return "RGBA64";
+        case QImage::Format_RGBA64_Premultiplied   : return "RGBA64_Premultiplied";
+        default : break;
+    }
+    return "Unknown";
 }
+
+}
+
+Q_DECLARE_METATYPE(VkDescriptorBufferInfo);
+Q_DECLARE_METATYPE(VkDescriptorImageInfo);
 
 void Cube::initResource(QVulkanInstance *vulkanInstance,
                         QVulkanDeviceFunctions *devFuncs,
@@ -98,14 +140,14 @@ void Cube::initResource(QVulkanInstance *vulkanInstance,
     };
 
     static const float cubeUV[] = {
-        0.0f, 0.0f,
-        1.0f, 0.0f,
-        1.0f, 1.0f,
-        0.0f, 1.0f,
-        1.0f, 1.0f,
-        1.0f, 0.0f,
-        0.0f, 0.0f,
-        0.0f, 1.0f,
+        0.0f, 0.0f, //0
+        1.0f, 0.0f, //1
+        1.0f, 1.0f, //2
+        0.0f, 1.0f, //3
+        1.0f, 1.0f, //4
+        1.0f, 0.0f, //5
+        0.0f, 0.0f, //6
+        0.0f, 1.0f, //7
     };
 
     //static const int16_t indices[] = {
@@ -129,6 +171,8 @@ void Cube::initResource(QVulkanInstance *vulkanInstance,
     if (mUseTexture) {
         mGo.vertices.push_back(std::unique_ptr<BufferDescr>(new BufferDescr(*mVulkanInstance, mDevice, mPhysicalDev)));
         mGo.vertices[1]->createBuffer(cubeUV, sizeof(cubeUV), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+
+        prepareTexture();
     }
 
     mGo.indices = std::unique_ptr<BufferDescr>(new BufferDescr(*mVulkanInstance, mDevice, mPhysicalDev));
@@ -140,14 +184,74 @@ void Cube::initResource(QVulkanInstance *vulkanInstance,
     mGo.uniforms = std::unique_ptr<BufferDescr>(new BufferDescr(*mVulkanInstance, mDevice, mPhysicalDev));
     mGo.uniforms->createBuffer(&uniformDefinition, sizeof(uniformDefinition), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
-    mGo.uniformMapping.resize(1); // one descriptor set
-    mGo.uniformMapping.back().resize(1); // one binding
-    VkDescriptorBufferInfo& uniformBufferInfo = mGo.uniformMapping.back().back();
+    mGo.uniformMapping.resize(1); // descriptor sets
+    mGo.uniformMapping.back().resize(1 + (mUseTexture ? 1 : 0)); // bindings
+    VkDescriptorBufferInfo uniformBufferInfo;
     uniformBufferInfo.buffer = mGo.uniforms->getBuffer();
     uniformBufferInfo.offset = 0;
     uniformBufferInfo.range = sizeof(::Uniform);
+    mGo.uniformMapping[0][0] = QVariant::fromValue(uniformBufferInfo);
+
+    if (mUseTexture) {
+        VkDescriptorImageInfo uniformSamplerInfo;
+        uniformSamplerInfo.sampler = mGo.textures.back().sampler->getSampler();
+        uniformSamplerInfo.imageView = mGo.textures.back().view->getImageView();
+        uniformSamplerInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        mGo.uniformMapping[0][1] = QVariant::fromValue(uniformSamplerInfo);
+        mSetTextureLayout = true;
+    }
 
     mGo.modelMtx = glm::identity<glm::mat4>();
+}
+
+void Cube::setImageLayout(VkCommandBuffer cmdBuf)
+{
+    // TODO
+    // Similar found in some Vulkan example but it works without this also. Is this bug? Does't matter which layout I choose, for my device.
+    // I have to check if it is realy faster, read more!!!
+    if (!mSetTextureLayout) {
+        return;
+    }
+    mSetTextureLayout = false;
+
+    auto imgLayoutToDstAccessMask = [](const VkImageLayout &layout) -> uint32_t {
+        switch (layout) {
+        case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL            : return VK_ACCESS_TRANSFER_WRITE_BIT;
+        case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL            : return VK_ACCESS_TRANSFER_READ_BIT;
+        case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL        : return VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL: return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+            // Make sure any Copy or CPU writes to image are flushed
+                                                             : return (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT);
+        case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR                 : return VK_ACCESS_MEMORY_READ_BIT;
+        default:
+            break;
+        }
+        return 0;
+    };
+
+    VkImageMemoryBarrier barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = imgLayoutToDstAccessMask(barrier.newLayout);
+    barrier.srcQueueFamilyIndex = 0;
+    barrier.dstQueueFamilyIndex = 0;
+    barrier.image = mGo.textures.back().image->getImage();
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.baseArrayLayer = 0;
+
+    mDevFuncs->vkCmdPipelineBarrier(cmdBuf,
+                                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                    VkDependencyFlagBits(),
+                                    0, nullptr,
+                                    0, nullptr,
+                                    1, &barrier);
 }
 
 void Cube::initPipeline(PipelineManager *pipelineMgr)
@@ -167,6 +271,22 @@ void Cube::initPipeline(PipelineManager *pipelineMgr)
 void Cube::update()
 {
     updateUniformBuffer();
+}
+
+void Cube::setupBarrier(VkCommandBuffer cmdBuf)
+{
+    assert(mDevFuncs);
+    if (!mGo.pipelineInfo) {
+        qWarning("%s does not contain pipelineInfo object!", mId.c_str());
+        return;
+    }
+
+    if (!cmdBuf) {
+        qWarning("Invalid command buffer provided! While setupBarrier: %s", mId.c_str());
+        return;
+    }
+
+    setImageLayout(cmdBuf);
 }
 
 void Cube::draw(VkCommandBuffer cmdBuf)
@@ -223,6 +343,7 @@ void Cube::releaseResource()
     mGo.indicesCount = 0;
     mGo.uniforms.release();
     mGo.uniformMapping.clear();
+    mGo.textures.clear();
 }
 
 void Cube::updateUniformBuffer()
@@ -246,4 +367,71 @@ void Cube::updateUniformBuffer()
     memcpy(deviceMemMapped + offsetof(Uniform, mvpMtx), &mvpMtx[0], sizeof(mvpMtx));
 
     mDevFuncs->vkUnmapMemory(mDevice, mGo.uniforms->getMem());
+}
+
+void Cube::prepareTexture()
+{
+    //QString imageFilePath = "../../resources/textures/wood_001.jpg";
+    QString imageFilePath = "../../resources/textures/test.png";
+    if (!mImage.load(imageFilePath)) {
+        qWarning("Can't load image: %s", imageFilePath.toLatin1().data());
+    }
+    else {
+        qInfo("Loaded image: %s size(%d, %d), format(%s-%d), hasAlpha(%d)"
+              , imageFilePath.toLatin1().data()
+              , mImage.width(), mImage.height()
+              , qImgFormatToStr(mImage.format()), static_cast<int>(mImage.format())
+              , static_cast<int>(mImage.hasAlphaChannel()));
+        if (mImage.format() != QImage::Format_RGBA8888) {
+            mImage = mImage.convertToFormat(QImage::Format_RGBA8888);
+        }
+        //mImage.data_ptr();
+        const uchar * rawData = mImage.bits();
+
+        VkExtent3D imageSize = {static_cast<uint32_t>(mImage.width()), static_cast<uint32_t>(mImage.height()), 1};
+
+        mGo.textures.push_back(Texture());
+        Texture& t = mGo.textures.back();
+        VkFormat imgFormat = VkFormat::VK_FORMAT_R8G8B8A8_UNORM;
+        t.image = std::unique_ptr<ImageDescr>(new ImageDescr(*mVulkanInstance, mDevice, mPhysicalDev));
+        t.image->createImage(imgFormat, imageSize, 1, rawData, false, VK_IMAGE_USAGE_SAMPLED_BIT);
+
+        VkSamplerCreateInfo sci = {};
+        sci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        //sci.flags = ;
+        sci.magFilter = VK_FILTER_NEAREST;
+        sci.minFilter = VK_FILTER_NEAREST;
+        sci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        sci.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        sci.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        //sci.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        //sci.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        sci.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        sci.mipLodBias = 0.0f;
+        sci.anisotropyEnable = VK_FALSE;
+        sci.maxAnisotropy = 1.0f;
+        sci.compareEnable = VK_FALSE;
+        sci.compareOp = VK_COMPARE_OP_NEVER;
+        sci.minLod = 0.0f;
+        sci.maxLod = 0.0f;
+        sci.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+        sci.unnormalizedCoordinates = VK_FALSE;
+        t.sampler = std::unique_ptr<SamplerDescr>(new SamplerDescr(*mVulkanInstance, mDevice));
+        t.sampler->createSampler(sci);
+
+        VkImageViewCreateInfo ivci = {};
+        ivci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        //imageViewInfo.flags = ;
+        ivci.image = t.image->getImage();
+        ivci.viewType = ImageViewDescr::imgFormatToViewFormat(VK_IMAGE_TYPE_2D);
+        ivci.format = imgFormat;
+        //imageViewInfo.components = ; // swizzling
+        ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        ivci.subresourceRange.baseMipLevel = 0;
+        ivci.subresourceRange.levelCount = 1;
+        ivci.subresourceRange.baseArrayLayer = 0;
+        ivci.subresourceRange.layerCount = 1;
+        t.view = std::unique_ptr<ImageViewDescr>(new ImageViewDescr(*mVulkanInstance, mDevice));
+        t.view->createImageView(ivci);
+    }
 }

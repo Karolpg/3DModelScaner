@@ -24,32 +24,42 @@ SOFTWARE.
 
 #pragma once
 
-#include "BufferDescr.hpp"
-#include <glm/glm.hpp>
-#include <memory>
-#include <vector>
-#include "PipelineManager.hpp"
-#include "Texture.hpp"
+#include <vulkan/vulkan.h>
+#include <map>
 
+class QVulkanInstance;
 class QVulkanDeviceFunctions;
 
-struct GraphicObject
+class ImageDescr
 {
-    std::vector<std::unique_ptr<BufferDescr>> vertices; // vector index is binding of vertex attribute ( vertices[binding] )
+public:
+    ///
+    ///  Device should be created from provided physicalDevice
+    ///
+    ImageDescr(QVulkanInstance &vulkanInstance, VkDevice device, VkPhysicalDevice physicalDev);
+    ~ImageDescr();
 
-    std::unique_ptr<BufferDescr> indices;
-    VkIndexType    indexType;
-    uint32_t       indicesCount;
+    bool createImage(VkFormat pixelFormat, VkExtent3D imageSize, uint32_t mipLevels, const uint8_t* data,
+                     bool generateMipMaps, VkImageUsageFlags usage);
+    VkImage getImage() const { return mImage; }
+    VkDeviceMemory getMem() const { return mMem; }
 
-    std::unique_ptr<BufferDescr> uniforms;
-    std::vector<std::vector<QVariant>> uniformMapping; // key1 - descr set id, key2 - binding  ( uniformMapping[descrSet][binding] = VkDescriptorBufferInfo|VkDescriptorImageInfo)
+    ImageDescr(const ImageDescr&) = delete;
+    ImageDescr& operator=(const ImageDescr&) = delete;
 
-    std::vector<Texture> textures;
+    ImageDescr(ImageDescr&&);
+    ImageDescr& operator=(ImageDescr&&);
 
-    const PipelineManager::PipelineInfo* pipelineInfo;
+protected:
+    void release();
+    void swapAll(ImageDescr&&);
 
-    glm::mat4x4    modelMtx;
+    VkImage mImage = nullptr;
+    VkDeviceMemory mMem = nullptr;
+    VkDevice mDevice = nullptr;
+    QVulkanDeviceFunctions *mDevFuncs = nullptr;
 
-    void connectResourceWithUniformSets(QVulkanDeviceFunctions &devFuncs, VkDevice device);
+    static std::map<VkDevice, VkPhysicalDeviceMemoryProperties> sMemPropMap;
+
 };
 

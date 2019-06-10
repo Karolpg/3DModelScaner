@@ -24,32 +24,41 @@ SOFTWARE.
 
 #pragma once
 
-#include "BufferDescr.hpp"
-#include <glm/glm.hpp>
-#include <memory>
-#include <vector>
-#include "PipelineManager.hpp"
-#include "Texture.hpp"
+#include <vulkan/vulkan.h>
+#include <map>
 
+class QVulkanInstance;
 class QVulkanDeviceFunctions;
 
-struct GraphicObject
+class ImageViewDescr
 {
-    std::vector<std::unique_ptr<BufferDescr>> vertices; // vector index is binding of vertex attribute ( vertices[binding] )
+public:
+    ///
+    ///  Device should be created from provided physicalDevice
+    ///
+    ImageViewDescr(QVulkanInstance &vulkanInstance, VkDevice device);
+    ~ImageViewDescr();
 
-    std::unique_ptr<BufferDescr> indices;
-    VkIndexType    indexType;
-    uint32_t       indicesCount;
+    bool createImageView(const VkImageViewCreateInfo &imageViewInfo);
+    VkImageView getImageView() const { return mImageView; }
 
-    std::unique_ptr<BufferDescr> uniforms;
-    std::vector<std::vector<QVariant>> uniformMapping; // key1 - descr set id, key2 - binding  ( uniformMapping[descrSet][binding] = VkDescriptorBufferInfo|VkDescriptorImageInfo)
+    ImageViewDescr(const ImageViewDescr&) = delete;
+    ImageViewDescr& operator=(const ImageViewDescr&) = delete;
 
-    std::vector<Texture> textures;
+    ImageViewDescr(ImageViewDescr&&);
+    ImageViewDescr& operator=(ImageViewDescr&&);
 
-    const PipelineManager::PipelineInfo* pipelineInfo;
+    ///
+    /// Simple conversion of base three types
+    ///
+    static VkImageViewType imgFormatToViewFormat(VkImageType imgType);
 
-    glm::mat4x4    modelMtx;
+protected:
+    void release();
+    void swapAll(ImageViewDescr&&);
 
-    void connectResourceWithUniformSets(QVulkanDeviceFunctions &devFuncs, VkDevice device);
+    VkImageView mImageView = nullptr;
+    VkDevice mDevice = nullptr;
+    QVulkanDeviceFunctions *mDevFuncs = nullptr;
 };
 

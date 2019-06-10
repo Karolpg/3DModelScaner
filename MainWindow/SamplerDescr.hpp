@@ -24,32 +24,37 @@ SOFTWARE.
 
 #pragma once
 
-#include "BufferDescr.hpp"
-#include <glm/glm.hpp>
-#include <memory>
-#include <vector>
-#include "PipelineManager.hpp"
-#include "Texture.hpp"
+#include <vulkan/vulkan.h>
+#include <map>
 
+class QVulkanInstance;
 class QVulkanDeviceFunctions;
 
-struct GraphicObject
+class SamplerDescr
 {
-    std::vector<std::unique_ptr<BufferDescr>> vertices; // vector index is binding of vertex attribute ( vertices[binding] )
+public:
+    ///
+    ///  Device should be created from provided physicalDevice
+    ///
+    SamplerDescr(QVulkanInstance &vulkanInstance, VkDevice device);
+    ~SamplerDescr();
 
-    std::unique_ptr<BufferDescr> indices;
-    VkIndexType    indexType;
-    uint32_t       indicesCount;
+    bool createSampler(const VkSamplerCreateInfo& samplerInfo);
+    VkSampler getSampler() const { return mSampler; }
 
-    std::unique_ptr<BufferDescr> uniforms;
-    std::vector<std::vector<QVariant>> uniformMapping; // key1 - descr set id, key2 - binding  ( uniformMapping[descrSet][binding] = VkDescriptorBufferInfo|VkDescriptorImageInfo)
+    SamplerDescr(const SamplerDescr&) = delete;
+    SamplerDescr& operator=(const SamplerDescr&) = delete;
 
-    std::vector<Texture> textures;
+    SamplerDescr(SamplerDescr&&);
+    SamplerDescr& operator=(SamplerDescr&&);
 
-    const PipelineManager::PipelineInfo* pipelineInfo;
+protected:
+    void release();
+    void swapAll(SamplerDescr&&);
 
-    glm::mat4x4    modelMtx;
+    VkSampler mSampler = nullptr;
+    VkDevice mDevice = nullptr;
+    QVulkanDeviceFunctions *mDevFuncs = nullptr;
 
-    void connectResourceWithUniformSets(QVulkanDeviceFunctions &devFuncs, VkDevice device);
 };
 

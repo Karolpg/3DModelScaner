@@ -50,12 +50,10 @@ BufferDescr::~BufferDescr()
 
 void BufferDescr::release()
 {
-    if (mDevFuncs) {
-        mDevFuncs->vkDestroyBuffer(mDevice, mBuffer, nullptr);
-        mDevFuncs->vkFreeMemory(mDevice, mMem, nullptr);
-        mBuffer = nullptr;
-        mMem = nullptr;
-    }
+    mDevFuncs->vkDestroyBuffer(mDevice, mBuffer, nullptr);
+    mDevFuncs->vkFreeMemory(mDevice, mMem, nullptr);
+    mBuffer = nullptr;
+    mMem = nullptr;
 }
 
 BufferDescr::BufferDescr(BufferDescr&& other)
@@ -83,7 +81,7 @@ bool BufferDescr::createBuffer(const void* data, size_t dataSize, VkBufferUsageF
     VkResult result = VK_SUCCESS;
 
     //
-    // Vertex buffer description
+    // Buffer description
     //
     VkBufferCreateInfo bufferInfo = {};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;

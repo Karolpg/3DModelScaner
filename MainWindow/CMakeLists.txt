@@ -22,11 +22,14 @@ compileShaders(${PROJECT_SOURCE_DIR}/resources/shaders  ${PROJECT_SOURCE_DIR}/bi
 add_executable(3DModelScaner    main.cpp 
                                 BufferDescr.cpp
                                 Cube.cpp
+                                GraphicObject.cpp
+                                ImageDescr.cpp
+                                ImageViewDescr.cpp
                                 MainWindow.cpp 
                                 PipelineManager.cpp
+                                SamplerDescr.cpp
                                 VulkanWindow.cpp 
                                 VulkanRenderer.cpp
-                                GraphicObject.cpp
                                 ${commandOutList})
 target_link_libraries(3DModelScaner ${QT_LIBS} ${VULKAN_LIB} ${SHADERC_LIB} pthread ${SPIRV_CROSS_LIB})
 

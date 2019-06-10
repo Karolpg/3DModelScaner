@@ -47,7 +47,7 @@ void VulkanRenderer::initResources()
     mDevFuncs = mParent.vulkanInstance()->deviceFunctions(mParent.device());
     assert(mDevFuncs && "Device functions should to be valid here!!!");
 
-    Cube* cube = new Cube(false); // TODO move this allocation somewhere else
+    Cube* cube = new Cube(true); // TODO move this allocation somewhere else
     cube->setProjMtx(&mProjMtx);
     cube->setViewMtx(&mViewMtx);
     mCube = std::unique_ptr<IRenderable>(cube);
@@ -103,6 +103,8 @@ void VulkanRenderer::startNextFrame()
 
     QSize frameSize = mParent.swapChainImageSize();
     VkCommandBuffer cmdBuf = mParent.currentCommandBuffer();
+
+    mCube->setupBarrier(cmdBuf);
 
     VkClearColorValue clearColor = { {  0.2f, 0.2f, 0.2f, 1.0f } };
     VkClearDepthStencilValue clearDS = { 1.0f, 0 };

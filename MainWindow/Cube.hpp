@@ -28,6 +28,7 @@ SOFTWARE.
 #include <string>
 #include <vulkan/vulkan.h>
 #include "GraphicObject.hpp"
+#include <QImage>
 
 class QVulkanInstance;
 class QVulkanDeviceFunctions;
@@ -48,6 +49,7 @@ public:
                       VkPhysicalDevice physicalDev) override;
     void initPipeline(PipelineManager* pipelineMgr) override;
     void update() override;
+    void setupBarrier(VkCommandBuffer cmdBuf) override;
     void draw(VkCommandBuffer cmdBuf) override;
     void releasePipeline() override;
     void releaseResource() override;
@@ -56,6 +58,8 @@ public:
     void setProjMtx(const glm::mat4x4 *projMtx) { mProjMtx = projMtx;}
 protected:
     void updateUniformBuffer();
+    void setImageLayout(VkCommandBuffer cmdBuf);
+    void prepareTexture();
 
 protected:
     std::string mId;
@@ -67,8 +71,10 @@ protected:
     VkDevice mDevice;
     VkPhysicalDevice mPhysicalDev;
 
-    const glm::mat4x4 *mViewMtx;
-    const glm::mat4x4 *mProjMtx;
+    const glm::mat4x4 *mViewMtx = nullptr;
+    const glm::mat4x4 *mProjMtx = nullptr;
 
-    bool mUseTexture;
+    bool mUseTexture = false;
+    bool mSetTextureLayout = false;
+    QImage mImage;
 };
