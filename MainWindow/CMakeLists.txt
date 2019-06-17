@@ -20,18 +20,12 @@ compileShaders(${PROJECT_SOURCE_DIR}/resources/shaders  ${PROJECT_SOURCE_DIR}/bi
 # SOURCE
 #
 add_executable(3DModelScaner    main.cpp 
-                                BufferDescr.cpp
                                 Cube.cpp
-                                GraphicObject.cpp
-                                ImageDescr.cpp
-                                ImageViewDescr.cpp
                                 MainWindow.cpp 
-                                PipelineManager.cpp
-                                SamplerDescr.cpp
                                 VulkanWindow.cpp 
                                 VulkanRenderer.cpp
                                 ${commandOutList})
-target_link_libraries(3DModelScaner ${QT_LIBS} ${VULKAN_LIB} ${SHADERC_LIB} pthread ${SPIRV_CROSS_LIB})
+target_link_libraries(3DModelScaner ${QT_LIBS} ${VULKAN_LIB} pthread graphic)
 
 message("End cmake MainWindow dir...")
 

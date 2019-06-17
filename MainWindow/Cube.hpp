@@ -27,7 +27,7 @@ SOFTWARE.
 #include <IRenderable.hpp>
 #include <string>
 #include <vulkan/vulkan.h>
-#include "GraphicObject.hpp"
+#include <Graphic/GraphicObject.hpp>
 #include <QImage>
 
 class QVulkanInstance;

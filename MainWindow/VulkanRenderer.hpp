@@ -28,8 +28,8 @@ SOFTWARE.
 #include <glm/glm.hpp>
 #include <memory>
 
-#include "PipelineManager.hpp"
-#include "IRenderable.hpp"
+#include <Graphic/PipelineManager.hpp>
+#include <IRenderable.hpp>
 
 class VulkanRenderer : public QVulkanWindowRenderer
 {

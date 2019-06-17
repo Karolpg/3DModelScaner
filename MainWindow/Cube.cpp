@@ -27,8 +27,8 @@ SOFTWARE.
 #include <glm/ext.hpp>
 #include <QVulkanDeviceFunctions>
 
-#include "ImageDescr.hpp"
-#include "SamplerDescr.hpp"
+#include <Graphic/ImageDescr.hpp>
+#include <Graphic/SamplerDescr.hpp>
 
 
 Cube::Cube(bool useTexture)
@@ -140,13 +140,13 @@ void Cube::initResource(QVulkanInstance *vulkanInstance,
     };
 
     static const float cubeUV[] = {
-        0.0f  , 0.0f, //0
-        0.999f, 0.0f, //1
+        0.0f  , 0.0f,   //0
+        0.999f, 0.0f,   //1
         0.999f, 0.999f, //2
         0.0f  , 0.999f, //3
         0.999f, 0.999f, //4
-        0.999f, 0.0f, //5
-        0.0f  , 0.0f, //6
+        0.999f, 0.0f,   //5
+        0.0f  , 0.0f,   //6
         0.0f  , 0.999f, //7
     };
 

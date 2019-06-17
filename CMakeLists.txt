@@ -76,5 +76,7 @@ message("CMAKE_RUNTIME_OUTPUT_DIRECTORY = ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 # SOURCE
 #
 #include_directories("Include")
+include_directories(".")
+add_subdirectory(Graphic)
 add_subdirectory(MainWindow)
 
