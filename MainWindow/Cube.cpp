@@ -140,14 +140,14 @@ void Cube::initResource(QVulkanInstance *vulkanInstance,
     };
 
     static const float cubeUV[] = {
-        0.0f, 0.0f, //0
-        1.0f, 0.0f, //1
-        1.0f, 1.0f, //2
-        0.0f, 1.0f, //3
-        1.0f, 1.0f, //4
-        1.0f, 0.0f, //5
-        0.0f, 0.0f, //6
-        0.0f, 1.0f, //7
+        0.0f  , 0.0f, //0
+        0.999f, 0.0f, //1
+        0.999f, 0.999f, //2
+        0.0f  , 0.999f, //3
+        0.999f, 0.999f, //4
+        0.999f, 0.0f, //5
+        0.0f  , 0.0f, //6
+        0.0f  , 0.999f, //7
     };
 
     //static const int16_t indices[] = {

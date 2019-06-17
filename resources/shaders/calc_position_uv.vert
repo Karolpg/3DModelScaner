@@ -2,8 +2,10 @@
 
 layout(location = 0) in vec3 pos;
 layout(location = 1) in vec2 texCoord;
+
 layout(location = 0) out vec3 posOut;
 layout(location = 1) out vec2 texCoordOut;
+
 layout(binding = 0) uniform buf {
                                     mat4 mvp;
                                     mat4 view;
@@ -12,8 +14,9 @@ layout(binding = 0) uniform buf {
                                 } uniformBuf;
 
 void main() {
-    posOut = pos;
-    texCoordOut = texCoord;
     vec4 posLocal = vec4(pos, 1.0);
     gl_Position = uniformBuf.mvp * posLocal;
+
+    posOut = pos;
+    texCoordOut = texCoord;
 }

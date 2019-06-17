@@ -261,19 +261,19 @@ static void fillShaderInput(const std::string& shaderPath,
     auto separatedParam = parameters.find(PipelineManager::ApSeparatedAttributes);
     bool isSeparate = separatedParam == parameters.end() ? false : separatedParam->second.toBool();
     uint32_t inputStructureSize = 0;
+    uint32_t bindCtr = 0;
+    uint32_t offset = 0;
     for (uint32_t i = 0; i < resources.stage_inputs.size(); ++i) {
         const spirv_cross::Resource& inputRes = resources.stage_inputs[i];
         spirv_cross::SPIRType variableType = resourcesCtx.get_type(inputRes.type_id);
 
-        uint32_t binding = resourcesCtx.get_decoration(inputRes.id, spv::DecorationBinding);
         uint32_t location = resourcesCtx.get_decoration(inputRes.id, spv::DecorationLocation);
         uint32_t variableSize = (variableType.width / 8 + (variableType.width % 8 ? 1 : 0)) * variableType.vecsize * variableType.columns; // in bytes
         VkFormat variableFormat = SPIRTypeToVulkanFormat(variableType);
 
-        qInfo("Input: %s id:%d type:%d base:%d size:%d binding:%d location:%d"
+        qInfo("Input: %s id:%d type:%d base:%d size:%d location:%d"
              , inputRes.name.c_str(), inputRes.id, inputRes.type_id, inputRes.base_type_id
              , variableSize
-             , binding
              , location);
 
         if (variableFormat == VK_FORMAT_UNDEFINED) {
@@ -288,12 +288,7 @@ static void fillShaderInput(const std::string& shaderPath,
             inputStructureSize += variableSize;
         }
 
-        //uint32_t location = 0;
-        uint32_t bindCtr = 0;
-        uint32_t offset = 0;
-
-    #define UPDATE_VARS(sizeofAdded)  /*location += isSeparate ? 0 : 1; */\
-                                      bindCtr += isSeparate ? 1 : 0; \
+    #define UPDATE_VARS(sizeofAdded)  bindCtr += isSeparate ? 1 : 0; \
                                       offset += isSeparate ? 0 : sizeofAdded;
 
         vertexAtrDesc.push_back({location, bindCtr, variableFormat, offset});
