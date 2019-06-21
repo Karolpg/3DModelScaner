@@ -28,8 +28,11 @@ SOFTWARE.
 #include <glm/glm.hpp>
 #include <memory>
 
-#include <Graphic/PipelineManager.hpp>
 #include <IRenderable.hpp>
+
+class ResourceManager;
+class PipelineManager;
+class DrawManager;
 
 class VulkanRenderer : public QVulkanWindowRenderer
 {
@@ -58,14 +61,16 @@ protected:
 
     std::unique_ptr<IRenderable> mCube;
     std::unique_ptr<PipelineManager> mPipelineMgr;
+    std::unique_ptr<DrawManager> mDrawMgr;
+    std::unique_ptr<ResourceManager> mResourceMgr;
 
     glm::vec3 mEyePosition;
     glm::vec3 mEyeLookAtDir;
     const float mEyeLookAtDistance = 0.5f;
     const glm::vec3 mUpDir = glm::vec3(0.f, 1.f, 0.f); //-1 because of Vulkan Coordinates
 
-    glm::mat4x4 mViewMtx;
-    glm::mat4x4 mProjMtx;
+    std::shared_ptr<glm::mat4x4> mViewMtx;
+    std::shared_ptr<glm::mat4x4> mProjMtx;
 
     QVulkanWindow &mParent;
     QVulkanDeviceFunctions *mDevFuncs;

@@ -25,18 +25,13 @@ SOFTWARE.
 #pragma once
 
 #include <vulkan/vulkan.h>
-#include <map>
 
-class QVulkanInstance;
-class QVulkanDeviceFunctions;
+class ResourceManager;
 
 class SamplerDescr
 {
 public:
-    ///
-    ///  Device should be created from provided physicalDevice
-    ///
-    SamplerDescr(QVulkanInstance &vulkanInstance, VkDevice device);
+    SamplerDescr(ResourceManager* resourceMgr);
     ~SamplerDescr();
 
     bool createSampler(const VkSamplerCreateInfo& samplerInfo);
@@ -53,8 +48,7 @@ protected:
     void swapAll(SamplerDescr&&);
 
     VkSampler mSampler = nullptr;
-    VkDevice mDevice = nullptr;
-    QVulkanDeviceFunctions *mDevFuncs = nullptr;
 
+    ResourceManager* mResourceMgr;
 };
 

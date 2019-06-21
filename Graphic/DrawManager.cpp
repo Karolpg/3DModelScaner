@@ -22,36 +22,35 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#pragma once
+#include "DrawManager.hpp"
 
-#include <vulkan/vulkan.h>
 
-class ResourceManager;
-
-class ImageDescr
+void DrawManager::setCmdBuffer(VkCommandBuffer cmdBuf)
 {
-public:
-    ImageDescr(ResourceManager* resourceMgr);
-    ~ImageDescr();
+    mCmdBuf = cmdBuf;
+}
 
-    bool createImage(VkFormat pixelFormat, VkExtent3D imageSize, uint32_t mipLevels, const uint8_t* data,
-                     bool generateMipMaps, VkImageUsageFlags usage);
-    VkImage getImage() const { return mImage; }
-    VkDeviceMemory getMem() const { return mMem; }
+VkCommandBuffer DrawManager::getCmdBuffer() const
+{
+    return mCmdBuf;
+}
 
-    ImageDescr(const ImageDescr&) = delete;
-    ImageDescr& operator=(const ImageDescr&) = delete;
+void DrawManager::setProjMatrix(const std::shared_ptr<glm::mat4x4>& projMtx)
+{
+    mProjMtx = projMtx;
+}
 
-    ImageDescr(ImageDescr&&);
-    ImageDescr& operator=(ImageDescr&&);
+const std::shared_ptr<glm::mat4x4>& DrawManager::getProjMatrix() const
+{
+    return mProjMtx;
+}
 
-protected:
-    void release();
-    void swapAll(ImageDescr&&);
+void DrawManager::setViewMatrix(const std::shared_ptr<glm::mat4x4>& viewMtx)
+{
+    mViewMtx = viewMtx;
+}
 
-    VkImage mImage = nullptr;
-    VkDeviceMemory mMem = nullptr;
-
-    ResourceManager* mResourceMgr;
-};
-
+const std::shared_ptr<glm::mat4x4>& DrawManager::getViewMatrix() const
+{
+    return mViewMtx;
+}

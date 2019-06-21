@@ -32,6 +32,8 @@ SOFTWARE.
 
 class QVulkanInstance;
 class QVulkanDeviceFunctions;
+class DrawManager;
+class ResourceManager;
 
 class Cube : public IRenderable
 {
@@ -43,21 +45,16 @@ public:
     const char* id() const override;
     const char* description() const override;
 
-    void initResource(QVulkanInstance *vulkanInstance,
-                      QVulkanDeviceFunctions *devFuncs,
-                      VkDevice device,
-                      VkPhysicalDevice physicalDev) override;
+    void initResource(ResourceManager* resourceMgr) override;
     void initPipeline(PipelineManager* pipelineMgr) override;
-    void update() override;
-    void setupBarrier(VkCommandBuffer cmdBuf) override;
-    void draw(VkCommandBuffer cmdBuf) override;
+    void update(DrawManager* drawMgr) override;
+    void setupBarrier(DrawManager* drawMgr) override;
+    void draw(DrawManager* drawMgr) override;
     void releasePipeline() override;
     void releaseResource() override;
 
-    void setViewMtx(const glm::mat4x4 *viewMtx) { mViewMtx = viewMtx;}
-    void setProjMtx(const glm::mat4x4 *projMtx) { mProjMtx = projMtx;}
 protected:
-    void updateUniformBuffer();
+    void updateUniformBuffer(DrawManager* drawMgr);
     void setImageLayout(VkCommandBuffer cmdBuf);
     void prepareTexture();
 
@@ -66,13 +63,7 @@ protected:
     std::string mDescr;
     GraphicObject mGo;
 
-    QVulkanInstance *mVulkanInstance;
-    QVulkanDeviceFunctions *mDevFuncs;
-    VkDevice mDevice;
-    VkPhysicalDevice mPhysicalDev;
-
-    const glm::mat4x4 *mViewMtx = nullptr;
-    const glm::mat4x4 *mProjMtx = nullptr;
+    ResourceManager *mResourceMgr;
 
     bool mUseTexture = false;
     bool mSetTextureLayout = false;

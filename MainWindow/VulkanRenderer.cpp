@@ -29,11 +29,18 @@ SOFTWARE.
 #include <glm/ext.hpp>
 #include <array>
 #include "Cube.hpp"
+#include <Graphic/ResourceManager.hpp>
+#include <Graphic/PipelineManager.hpp>
+#include <Graphic/DrawManager.hpp>
 
 VulkanRenderer::VulkanRenderer(QVulkanWindow& parent)
-    : mParent(parent)
+    : mDrawMgr(std::unique_ptr<DrawManager>(new DrawManager()))
+    , mViewMtx(std::shared_ptr<glm::mat4x4>(new glm::mat4x4))
+    , mProjMtx(std::shared_ptr<glm::mat4x4>(new glm::mat4x4))
+    , mParent(parent)
 {
-
+    mDrawMgr->setProjMatrix(mProjMtx);
+    mDrawMgr->setViewMatrix(mViewMtx);
 }
 
 void VulkanRenderer::preInitResources()
@@ -47,11 +54,13 @@ void VulkanRenderer::initResources()
     mDevFuncs = mParent.vulkanInstance()->deviceFunctions(mParent.device());
     assert(mDevFuncs && "Device functions should to be valid here!!!");
 
+    mResourceMgr = std::unique_ptr<ResourceManager>(new ResourceManager(*mParent.vulkanInstance(),
+                                                                        mParent.device(),
+                                                                        mParent.physicalDevice()));
+
     Cube* cube = new Cube(true); // TODO move this allocation somewhere else
-    cube->setProjMtx(&mProjMtx);
-    cube->setViewMtx(&mViewMtx);
     mCube = std::unique_ptr<IRenderable>(cube);
-    mCube->initResource(mParent.vulkanInstance(), mDevFuncs, mParent.device(), mParent.physicalDevice());
+    mCube->initResource(mResourceMgr.get());
 }
 
 void VulkanRenderer::initSwapChainResources()
@@ -82,7 +91,7 @@ void VulkanRenderer::initSwapChainResources()
 
     mEyePosition = glm::vec3(0.f, 2.f, 5.f);
     mEyeLookAtDir = glm::normalize(glm::vec3(0.f, 0.f, 0.f) - mEyePosition);
-    mViewMtx = glm::mat4x4(1);
+    *mViewMtx.get() = glm::mat4x4(1);
     lookAt(mEyePosition, mEyePosition + mEyeLookAtDir*mEyeLookAtDistance, mUpDir);
 }
 
@@ -95,16 +104,17 @@ void VulkanRenderer::releaseSwapChainResources()
 void VulkanRenderer::releaseResources()
 {
     mCube->releaseResource();
+    mResourceMgr.reset();
 }
 
 void VulkanRenderer::startNextFrame()
 {
-    mCube->update();
-
     QSize frameSize = mParent.swapChainImageSize();
     VkCommandBuffer cmdBuf = mParent.currentCommandBuffer();
+    mDrawMgr->setCmdBuffer(cmdBuf);
 
-    mCube->setupBarrier(cmdBuf);
+    mCube->update(mDrawMgr.get());
+    mCube->setupBarrier(mDrawMgr.get());
 
     VkClearColorValue clearColor = { {  0.2f, 0.2f, 0.2f, 1.0f } };
     VkClearDepthStencilValue clearDS = { 1.0f, 0 };
@@ -124,11 +134,13 @@ void VulkanRenderer::startNextFrame()
     rpBeginInfo.pClearValues = clearValues;
     mDevFuncs->vkCmdBeginRenderPass(cmdBuf, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    mCube->draw(cmdBuf);
+    mCube->draw(mDrawMgr.get());
 
     mDevFuncs->vkCmdEndRenderPass(cmdBuf);
 
     mParent.frameReady();
+
+    mDrawMgr->setCmdBuffer(nullptr);
 }
 
 void VulkanRenderer::physicalDeviceLost()
@@ -170,18 +182,20 @@ void VulkanRenderer::lookAt(const glm::vec3& eye, const glm::vec3& center, const
     glm::vec3 const s(glm::normalize(glm::cross(f, up)));
     glm::vec3 const u(glm::cross(s, f));
 
-    mViewMtx[0][0] = s.x;
-    mViewMtx[1][0] = s.y;
-    mViewMtx[2][0] = s.z;
-    mViewMtx[0][1] = u.x;
-    mViewMtx[1][1] = u.y;
-    mViewMtx[2][1] = u.z;
-    mViewMtx[0][2] =-f.x;
-    mViewMtx[1][2] =-f.y;
-    mViewMtx[2][2] =-f.z;
-    mViewMtx[3][0] =-dot(s, eye);
-    mViewMtx[3][1] =-dot(u, eye);
-    mViewMtx[3][2] = dot(f, eye);
+    glm::mat4x4& viewMtx = *mViewMtx.get();
+
+    viewMtx[0][0] = s.x;
+    viewMtx[1][0] = s.y;
+    viewMtx[2][0] = s.z;
+    viewMtx[0][1] = u.x;
+    viewMtx[1][1] = u.y;
+    viewMtx[2][1] = u.z;
+    viewMtx[0][2] =-f.x;
+    viewMtx[1][2] =-f.y;
+    viewMtx[2][2] =-f.z;
+    viewMtx[3][0] =-dot(s, eye);
+    viewMtx[3][1] =-dot(u, eye);
+    viewMtx[3][2] = dot(f, eye);
 }
 
 void VulkanRenderer::preparePerspective(float fovRadians, float width, float height, float minDepth, float maxDepth)
@@ -189,11 +203,13 @@ void VulkanRenderer::preparePerspective(float fovRadians, float width, float hei
     float halfFov = 0.5f * fovRadians;
     float f = glm::cos(halfFov) / glm::sin(halfFov);
 
-    mProjMtx = glm::mat4x4(0);
-    mProjMtx[0][0] = f * height / width;
-    mProjMtx[1][1] = -f;
-    mProjMtx[2][2] = maxDepth / (minDepth - maxDepth);
-    mProjMtx[2][3] = -1;
-    mProjMtx[3][2] = (minDepth * maxDepth) / (minDepth - maxDepth);
+    glm::mat4x4& projMtx = *mProjMtx.get();
+
+    projMtx = glm::mat4x4(0);
+    projMtx[0][0] = f * height / width;
+    projMtx[1][1] = -f;
+    projMtx[2][2] = maxDepth / (minDepth - maxDepth);
+    projMtx[2][3] = -1;
+    projMtx[3][2] = (minDepth * maxDepth) / (minDepth - maxDepth);
 }
 

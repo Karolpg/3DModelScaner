@@ -24,28 +24,22 @@ SOFTWARE.
 
 #pragma once
 
-#include <memory>
-#include <vulkan/vulkan.h>
-
 class PipelineManager;
-class QVulkanInstance;
-class QVulkanDeviceFunctions;
+class DrawManager;
+class ResourceManager;
 
 class IRenderable
 {
 public:
     virtual ~IRenderable() {}
-    virtual const char* id() const = 0;                 /// sth to identify instance
+    virtual const char* id() const = 0;                 /// sth unique to identify instance
     virtual const char* description() const = 0;        /// some full description of instance
 
-    virtual void initResource(QVulkanInstance *vulkanInstance,
-                              QVulkanDeviceFunctions *devFuncs,
-                              VkDevice device,
-                              VkPhysicalDevice physicalDev) = 0;
+    virtual void initResource(ResourceManager* resourceMgr) = 0;
     virtual void initPipeline(PipelineManager* pipelineMgr) = 0;
-    virtual void update() = 0;
-    virtual void setupBarrier(VkCommandBuffer cmdBuf) = 0;
-    virtual void draw(VkCommandBuffer cmdBuf) = 0; // TODO change raw cmd buff with some kind of draw manager
+    virtual void update(DrawManager* drawMgr) = 0;
+    virtual void setupBarrier(DrawManager* drawMgr) = 0; // TODO probably to change
+    virtual void draw(DrawManager* drawMgr) = 0;
     virtual void releasePipeline() = 0;
     virtual void releaseResource() = 0;
 };

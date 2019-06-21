@@ -23,19 +23,15 @@ SOFTWARE.
 */
 
 #include "SamplerDescr.hpp"
+#include "ResourceManager.hpp"
 #include <QVulkanInstance>
 #include <QVulkanFunctions>
 #include <QVulkanDeviceFunctions>
 
-SamplerDescr::SamplerDescr(QVulkanInstance &vulkanInstance, VkDevice device)
-    : mDevice(device)
+SamplerDescr::SamplerDescr(ResourceManager* resourceMgr)
+    : mResourceMgr(resourceMgr)
 {
-    assert(mDevice && "Device should be valid!");
-    mDevFuncs = vulkanInstance.deviceFunctions(mDevice);
-    assert(mDevFuncs && "Device functions should be valid!");
-
-    QVulkanFunctions *vulkanFunc = vulkanInstance.functions();
-    assert(vulkanFunc && "Vulkan instance functions should be valid!");
+    assert(mResourceMgr && "Resource Manager should be valid!");
 }
 
 SamplerDescr::~SamplerDescr()
@@ -45,7 +41,10 @@ SamplerDescr::~SamplerDescr()
 
 bool SamplerDescr::createSampler(const VkSamplerCreateInfo& samplerInfo)
 {
-    VkResult result = mDevFuncs->vkCreateSampler(mDevice, &samplerInfo, nullptr, &mSampler);
+    QVulkanDeviceFunctions* devFuncs = mResourceMgr->deviceFunctions();
+    VkDevice device = mResourceMgr->device();
+
+    VkResult result = devFuncs->vkCreateSampler(device, &samplerInfo, nullptr, &mSampler);
     if (result != VK_SUCCESS) {
         qWarning("Can't create image\n");
         return false;
@@ -55,7 +54,10 @@ bool SamplerDescr::createSampler(const VkSamplerCreateInfo& samplerInfo)
 
 void SamplerDescr::release()
 {
-    mDevFuncs->vkDestroySampler(mDevice, mSampler, nullptr);
+    QVulkanDeviceFunctions* devFuncs = mResourceMgr->deviceFunctions();
+    VkDevice device = mResourceMgr->device();
+
+    devFuncs->vkDestroySampler(device, mSampler, nullptr);
     mSampler = nullptr;
 }
 
@@ -73,6 +75,5 @@ SamplerDescr& SamplerDescr::operator=(SamplerDescr&& other)
 void SamplerDescr::swapAll(SamplerDescr&& other)
 {
     std::swap(mSampler, other.mSampler);
-    std::swap(mDevice, other.mDevice);
-    std::swap(mDevFuncs, other.mDevFuncs);
+    std::swap(mResourceMgr, other.mResourceMgr);
 }

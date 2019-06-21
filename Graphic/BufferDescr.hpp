@@ -25,19 +25,13 @@ SOFTWARE.
 #pragma once
 
 #include <vulkan/vulkan.h>
-#include <map>
 
-class QVulkanInstance;
-class QVulkanDeviceFunctions;
+class ResourceManager;
 
 class BufferDescr
 {
 public:
-
-    ///
-    ///  Device should be created from provided physicalDevice
-    ///
-    BufferDescr(QVulkanInstance &vulkanInstance, VkDevice device, VkPhysicalDevice physicalDev);
+    BufferDescr(ResourceManager* resourceMgr);
     ~BufferDescr();
 
     //TODO this is creating direct buffer for both host and device access - add other posibilities - some staging buffer
@@ -57,8 +51,6 @@ protected:
 
     VkBuffer mBuffer = nullptr;
     VkDeviceMemory mMem = nullptr;
-    VkDevice mDevice = nullptr;
-    QVulkanDeviceFunctions *mDevFuncs = nullptr;
 
-    static std::map<VkDevice, VkPhysicalDeviceMemoryProperties> sMemPropMap;
+    ResourceManager* mResourceMgr;
 };

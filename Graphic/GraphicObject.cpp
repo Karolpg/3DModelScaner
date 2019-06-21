@@ -23,6 +23,7 @@ SOFTWARE.
 */
 
 #include "GraphicObject.hpp"
+#include "BufferDescr.hpp"
 #include <QVulkanDeviceFunctions>
 
 void GraphicObject::connectResourceWithUniformSets(QVulkanDeviceFunctions &devFuncs, VkDevice device)

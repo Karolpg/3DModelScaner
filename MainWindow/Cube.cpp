@@ -29,16 +29,12 @@ SOFTWARE.
 
 #include <Graphic/ImageDescr.hpp>
 #include <Graphic/SamplerDescr.hpp>
+#include <Graphic/DrawManager.hpp>
+#include <Graphic/ResourceManager.hpp>
 
 
 Cube::Cube(bool useTexture)
-    : mVulkanInstance(nullptr)
-    , mDevFuncs(nullptr)
-    , mDevice(nullptr)
-    , mPhysicalDev(nullptr)
-    , mViewMtx(nullptr)
-    , mProjMtx(nullptr)
-    , mUseTexture(useTexture)
+    : mUseTexture(useTexture)
 {
     static std::atomic_uint counter;
     uint32_t localId = ++counter;
@@ -111,22 +107,10 @@ const char* qImgFormatToStr(QImage::Format format) {
 Q_DECLARE_METATYPE(VkDescriptorBufferInfo);
 Q_DECLARE_METATYPE(VkDescriptorImageInfo);
 
-void Cube::initResource(QVulkanInstance *vulkanInstance,
-                        QVulkanDeviceFunctions *devFuncs,
-                        VkDevice device,
-                        VkPhysicalDevice physicalDev)
+void Cube::initResource(ResourceManager* resourceMgr)
 {
-    mVulkanInstance = vulkanInstance;
-    assert(mVulkanInstance);
-
-    mDevFuncs = devFuncs;
-    assert(mDevFuncs);
-
-    mDevice = device;
-    assert(mDevice);
-
-    mPhysicalDev = physicalDev;
-    assert(mPhysicalDev);
+    assert(resourceMgr);
+    mResourceMgr = resourceMgr;
 
     static const float cubeVertices[] = {
         -1.0f,-1.0f,-1.0f, //0               2--------- 3
@@ -165,23 +149,23 @@ void Cube::initResource(QVulkanInstance *vulkanInstance,
         5,0,1,    5,1,6, //down
     };
 
-    mGo.vertices.push_back(std::unique_ptr<BufferDescr>(new BufferDescr(*mVulkanInstance, mDevice, mPhysicalDev)));
+    mGo.vertices.push_back(mResourceMgr->createBuffer());
     mGo.vertices[0]->createBuffer(cubeVertices, sizeof(cubeVertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
     if (mUseTexture) {
-        mGo.vertices.push_back(std::unique_ptr<BufferDescr>(new BufferDescr(*mVulkanInstance, mDevice, mPhysicalDev)));
+        mGo.vertices.push_back(mResourceMgr->createBuffer());
         mGo.vertices[1]->createBuffer(cubeUV, sizeof(cubeUV), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
         prepareTexture();
     }
 
-    mGo.indices = std::unique_ptr<BufferDescr>(new BufferDescr(*mVulkanInstance, mDevice, mPhysicalDev));
+    mGo.indices = mResourceMgr->createBuffer();
     mGo.indices->createBuffer(indices, sizeof(indices), VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
     mGo.indexType = VK_INDEX_TYPE_UINT16;
     mGo.indicesCount = sizeof(indices)/sizeof(indices[0]);
 
     ::Uniform uniformDefinition = {};
-    mGo.uniforms = std::unique_ptr<BufferDescr>(new BufferDescr(*mVulkanInstance, mDevice, mPhysicalDev));
+    mGo.uniforms = mResourceMgr->createBuffer();
     mGo.uniforms->createBuffer(&uniformDefinition, sizeof(uniformDefinition), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
     mGo.uniformMapping.resize(1); // descriptor sets
@@ -245,13 +229,14 @@ void Cube::setImageLayout(VkCommandBuffer cmdBuf)
     barrier.subresourceRange.baseMipLevel = 0;
     barrier.subresourceRange.baseArrayLayer = 0;
 
-    mDevFuncs->vkCmdPipelineBarrier(cmdBuf,
-                                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                    VkDependencyFlagBits(),
-                                    0, nullptr,
-                                    0, nullptr,
-                                    1, &barrier);
+    QVulkanDeviceFunctions *devFuncs = mResourceMgr->deviceFunctions();
+    devFuncs->vkCmdPipelineBarrier(cmdBuf,
+                                   VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                   VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                   VkDependencyFlagBits(),
+                                   0, nullptr,
+                                   0, nullptr,
+                                   1, &barrier);
 }
 
 void Cube::initPipeline(PipelineManager *pipelineMgr)
@@ -265,51 +250,57 @@ void Cube::initPipeline(PipelineManager *pipelineMgr)
         mGo.pipelineInfo = pipelineMgr->getPipeline("../shaders/calc_position.vert.bin", "", "", "", "../shaders/gradient.frag.bin");
     }
 
-    mGo.connectResourceWithUniformSets(*mDevFuncs, mDevice);
+    QVulkanDeviceFunctions *devFuncs = mResourceMgr->deviceFunctions();
+    VkDevice device = mResourceMgr->device();
+
+    mGo.connectResourceWithUniformSets(*devFuncs, device);
 }
 
-void Cube::update()
+void Cube::update(DrawManager* drawMgr)
 {
-    updateUniformBuffer();
+    updateUniformBuffer(drawMgr);
 }
 
-void Cube::setupBarrier(VkCommandBuffer cmdBuf)
+void Cube::setupBarrier(DrawManager* drawMgr)
 {
-    assert(mDevFuncs);
+    assert(drawMgr);
     if (!mGo.pipelineInfo) {
         qWarning("%s does not contain pipelineInfo object!", mId.c_str());
         return;
     }
 
-    if (!cmdBuf) {
+    if (!drawMgr->getCmdBuffer()) {
         qWarning("Invalid command buffer provided! While setupBarrier: %s", mId.c_str());
         return;
     }
 
-    setImageLayout(cmdBuf);
+    setImageLayout(drawMgr->getCmdBuffer());
 }
 
-void Cube::draw(VkCommandBuffer cmdBuf)
+void Cube::draw(DrawManager* drawMgr)
 {
-    assert(mDevFuncs);
+    assert(drawMgr);
     if (!mGo.pipelineInfo) {
         qWarning("%s does not contain pipelineInfo object!", mId.c_str());
         return;
     }
+
+    QVulkanDeviceFunctions *devFuncs = mResourceMgr->deviceFunctions();
+    VkCommandBuffer cmdBuf = drawMgr->getCmdBuffer();
 
     if (!cmdBuf) {
         qWarning("Invalid command buffer provided! While drawing: %s", mId.c_str());
         return;
     }
 
-    mDevFuncs->vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, mGo.pipelineInfo->pipeline);
+    devFuncs->vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, mGo.pipelineInfo->pipeline);
 
     std::vector<VkDescriptorSet> descriptorSets(mGo.pipelineInfo->descriptorSetInfo.size());
     for (size_t descriptorSetIdx = 0; descriptorSetIdx < descriptorSets.size(); ++descriptorSetIdx) {
         descriptorSets[descriptorSetIdx] = mGo.pipelineInfo->descriptorSetInfo[descriptorSetIdx].descriptor;
     }
 
-    mDevFuncs->vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, mGo.pipelineInfo->pipelineLayout,
+    devFuncs->vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, mGo.pipelineInfo->pipelineLayout,
                                        0, static_cast<uint32_t>(descriptorSets.size()), descriptorSets.data(), //descriptor set info
                                        0, nullptr); //dynamic offset
 
@@ -322,13 +313,13 @@ void Cube::draw(VkCommandBuffer cmdBuf)
         vertexBuffers[i] = mGo.vertices[i]->getBuffer();
     }
 
-    mDevFuncs->vkCmdBindVertexBuffers(cmdBuf, firstBinding, static_cast<uint32_t>(vertexBuffers.size()), vertexBuffers.data(), offsets.data());
+    devFuncs->vkCmdBindVertexBuffers(cmdBuf, firstBinding, static_cast<uint32_t>(vertexBuffers.size()), vertexBuffers.data(), offsets.data());
 
     VkDeviceSize indexOffset = 0;
-    mDevFuncs->vkCmdBindIndexBuffer(cmdBuf, mGo.indices->getBuffer(), indexOffset,  mGo.indexType);
+    devFuncs->vkCmdBindIndexBuffer(cmdBuf, mGo.indices->getBuffer(), indexOffset,  mGo.indexType);
 
     //vkCmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
-    mDevFuncs->vkCmdDrawIndexed(cmdBuf, mGo.indicesCount, 1, 0, 0, 0);
+    devFuncs->vkCmdDrawIndexed(cmdBuf, mGo.indicesCount, 1, 0, 0, 0);
 }
 
 void Cube::releasePipeline()
@@ -338,35 +329,33 @@ void Cube::releasePipeline()
 
 void Cube::releaseResource()
 {
-    mGo.vertices.clear();
-    mGo.indices.release();
-    mGo.indicesCount = 0;
-    mGo.uniforms.release();
-    mGo.uniformMapping.clear();
-    mGo.textures.clear();
+    mGo = {};
 }
 
-void Cube::updateUniformBuffer()
+void Cube::updateUniformBuffer(DrawManager* drawMgr)
 {
-    assert(mDevFuncs);
-    if (!mViewMtx || !mProjMtx) {
-        qWarning("%s does not have valid view or projection matrix!", mId.c_str());
-        return;
-    }
+    assert(drawMgr);
+    assert(drawMgr->getProjMatrix());
+    assert(drawMgr->getViewMatrix());
+    const glm::mat4x4& projMtx = *drawMgr->getProjMatrix().get();
+    const glm::mat4x4& viewMtx = *drawMgr->getViewMatrix().get();
+    QVulkanDeviceFunctions *devFuncs = mResourceMgr->deviceFunctions();
+    VkDevice device = mResourceMgr->device();
+
     VkDeviceSize offset = 0;
     VkMemoryMapFlags mappingFlags = 0; // reserved for future use
     void* deviceMemMappedPtr = nullptr;
-    mDevFuncs->vkMapMemory(mDevice, mGo.uniforms->getMem(), offset, sizeof(Uniform), mappingFlags, &deviceMemMappedPtr);
+    devFuncs->vkMapMemory(device, mGo.uniforms->getMem(), offset, sizeof(Uniform), mappingFlags, &deviceMemMappedPtr);
     char* deviceMemMapped = static_cast<char*>(deviceMemMappedPtr);
 
-    memcpy(deviceMemMapped + offsetof(Uniform, viewMtx), &((*mViewMtx)[0]), sizeof(decltype(*mViewMtx)));
-    memcpy(deviceMemMapped + offsetof(Uniform, projMtx), &((*mProjMtx)[0]), sizeof(decltype(*mProjMtx)));
+    memcpy(deviceMemMapped + offsetof(Uniform, viewMtx), &(viewMtx[0]), sizeof(decltype(viewMtx)));
+    memcpy(deviceMemMapped + offsetof(Uniform, projMtx), &(projMtx[0]), sizeof(decltype(projMtx)));
     memcpy(deviceMemMapped + offsetof(Uniform, modelMtx), &mGo.modelMtx[0], sizeof(mGo.modelMtx));
 
-    glm::mat4x4 mvpMtx = (*mProjMtx) * (*mViewMtx) * mGo.modelMtx;
+    glm::mat4x4 mvpMtx = projMtx * viewMtx * mGo.modelMtx;
     memcpy(deviceMemMapped + offsetof(Uniform, mvpMtx), &mvpMtx[0], sizeof(mvpMtx));
 
-    mDevFuncs->vkUnmapMemory(mDevice, mGo.uniforms->getMem());
+    devFuncs->vkUnmapMemory(device, mGo.uniforms->getMem());
 }
 
 void Cube::prepareTexture()
@@ -393,7 +382,7 @@ void Cube::prepareTexture()
         mGo.textures.push_back(Texture());
         Texture& t = mGo.textures.back();
         VkFormat imgFormat = VkFormat::VK_FORMAT_R8G8B8A8_UNORM;
-        t.image = std::unique_ptr<ImageDescr>(new ImageDescr(*mVulkanInstance, mDevice, mPhysicalDev));
+        t.image = mResourceMgr->createImage();
         t.image->createImage(imgFormat, imageSize, 1, rawData, false, VK_IMAGE_USAGE_SAMPLED_BIT);
 
         VkSamplerCreateInfo sci = {};
@@ -416,7 +405,7 @@ void Cube::prepareTexture()
         sci.maxLod = 0.0f;
         sci.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
         sci.unnormalizedCoordinates = VK_FALSE;
-        t.sampler = std::unique_ptr<SamplerDescr>(new SamplerDescr(*mVulkanInstance, mDevice));
+        t.sampler = mResourceMgr->createSampler();
         t.sampler->createSampler(sci);
 
         VkImageViewCreateInfo ivci = {};
@@ -431,7 +420,7 @@ void Cube::prepareTexture()
         ivci.subresourceRange.levelCount = 1;
         ivci.subresourceRange.baseArrayLayer = 0;
         ivci.subresourceRange.layerCount = 1;
-        t.view = std::unique_ptr<ImageViewDescr>(new ImageViewDescr(*mVulkanInstance, mDevice));
+        t.view = mResourceMgr->createImageView();
         t.view->createImageView(ivci);
     }
 }

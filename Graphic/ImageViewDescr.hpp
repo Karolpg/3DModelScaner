@@ -25,18 +25,13 @@ SOFTWARE.
 #pragma once
 
 #include <vulkan/vulkan.h>
-#include <map>
 
-class QVulkanInstance;
-class QVulkanDeviceFunctions;
+class ResourceManager;
 
 class ImageViewDescr
 {
 public:
-    ///
-    ///  Device should be created from provided physicalDevice
-    ///
-    ImageViewDescr(QVulkanInstance &vulkanInstance, VkDevice device);
+    ImageViewDescr(ResourceManager* resourceMgr);
     ~ImageViewDescr();
 
     bool createImageView(const VkImageViewCreateInfo &imageViewInfo);
@@ -58,7 +53,7 @@ protected:
     void swapAll(ImageViewDescr&&);
 
     VkImageView mImageView = nullptr;
-    VkDevice mDevice = nullptr;
-    QVulkanDeviceFunctions *mDevFuncs = nullptr;
+
+    ResourceManager* mResourceMgr;
 };
 

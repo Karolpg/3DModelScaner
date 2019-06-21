@@ -24,24 +24,25 @@ SOFTWARE.
 
 #pragma once
 
-#include "BufferDescr.hpp"
+
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
 #include "PipelineManager.hpp"
 #include "Texture.hpp"
 
+class BufferDescr;
 class QVulkanDeviceFunctions;
 
 struct GraphicObject
 {
-    std::vector<std::unique_ptr<BufferDescr>> vertices; // vector index is binding of vertex attribute ( vertices[binding] )
+    std::vector<BufferDescr*> vertices; // vector index is binding of vertex attribute ( vertices[binding] )
 
-    std::unique_ptr<BufferDescr> indices;
-    VkIndexType    indexType;
-    uint32_t       indicesCount;
+    BufferDescr* indices;
+    VkIndexType  indexType;
+    uint32_t     indicesCount;
 
-    std::unique_ptr<BufferDescr> uniforms;
+    BufferDescr* uniforms;
     std::vector<std::vector<QVariant>> uniformMapping; // key1 - descr set id, key2 - binding  ( uniformMapping[descrSet][binding] = VkDescriptorBufferInfo|VkDescriptorImageInfo)
 
     std::vector<Texture> textures;

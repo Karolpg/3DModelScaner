@@ -24,15 +24,14 @@ SOFTWARE.
 
 #pragma once
 
-#include "ImageDescr.hpp"
-#include "ImageViewDescr.hpp"
-#include "SamplerDescr.hpp"
-#include <memory>
+class ImageDescr;
+class ImageViewDescr;
+class SamplerDescr;
 
 struct Texture
 {
-    std::unique_ptr<ImageDescr>       image;
-    std::unique_ptr<ImageViewDescr>   view;
-    std::unique_ptr<SamplerDescr>     sampler;
+    ImageDescr       *image;
+    ImageViewDescr   *view;
+    SamplerDescr     *sampler;
 };
 

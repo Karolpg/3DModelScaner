@@ -23,16 +23,15 @@ SOFTWARE.
 */
 
 #include "ImageViewDescr.hpp"
+#include "ResourceManager.hpp"
 #include <QVulkanInstance>
 #include <QVulkanFunctions>
 #include <QVulkanDeviceFunctions>
 
-ImageViewDescr::ImageViewDescr(QVulkanInstance& vulkanInstance, VkDevice device)
-    : mDevice(device)
+ImageViewDescr::ImageViewDescr(ResourceManager* resourceMgr)
+    : mResourceMgr(resourceMgr)
 {
-    assert(mDevice && "Device should be valid!");
-    mDevFuncs = vulkanInstance.deviceFunctions(mDevice);
-    assert(mDevFuncs && "Device functions should be valid!");
+    assert(mResourceMgr && "Resource Manager should be valid!");
 }
 
 ImageViewDescr::~ImageViewDescr()
@@ -42,7 +41,9 @@ ImageViewDescr::~ImageViewDescr()
 
 void ImageViewDescr::release()
 {
-    mDevFuncs->vkDestroyImageView(mDevice, mImageView, nullptr);
+    QVulkanDeviceFunctions* devFuncs = mResourceMgr->deviceFunctions();
+    VkDevice device = mResourceMgr->device();
+    devFuncs->vkDestroyImageView(device, mImageView, nullptr);
     mImageView = nullptr;
 }
 
@@ -60,8 +61,7 @@ ImageViewDescr& ImageViewDescr::operator=(ImageViewDescr&& other)
 void ImageViewDescr::swapAll(ImageViewDescr&& other)
 {
     std::swap(mImageView, other.mImageView);
-    std::swap(mDevice, other.mDevice);
-    std::swap(mDevFuncs, other.mDevFuncs);
+    std::swap(mResourceMgr, other.mResourceMgr);
 }
 
 bool ImageViewDescr::createImageView(const VkImageViewCreateInfo& imageViewInfo)
@@ -69,7 +69,10 @@ bool ImageViewDescr::createImageView(const VkImageViewCreateInfo& imageViewInfo)
     release();
     VkResult result = VK_SUCCESS;
 
-    result = mDevFuncs->vkCreateImageView(mDevice, &imageViewInfo, nullptr, &mImageView);
+    QVulkanDeviceFunctions* devFuncs = mResourceMgr->deviceFunctions();
+    VkDevice device = mResourceMgr->device();
+
+    result = devFuncs->vkCreateImageView(device, &imageViewInfo, nullptr, &mImageView);
     if (result != VK_SUCCESS) {
         qWarning("Can't create image view\n");
         return false;

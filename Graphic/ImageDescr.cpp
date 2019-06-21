@@ -23,24 +23,15 @@ SOFTWARE.
 */
 
 #include "ImageDescr.hpp"
+#include "ResourceManager.hpp"
 #include <QVulkanInstance>
 #include <QVulkanFunctions>
 #include <QVulkanDeviceFunctions>
 
-std::map<VkDevice, VkPhysicalDeviceMemoryProperties> ImageDescr::sMemPropMap;
-
-ImageDescr::ImageDescr(QVulkanInstance& vulkanInstance, VkDevice device, VkPhysicalDevice physicalDev)
-    : mDevice(device)
+ImageDescr::ImageDescr(ResourceManager* resourceMgr)
+    : mResourceMgr(resourceMgr)
 {
-    assert(mDevice && "Device should be valid!");
-    mDevFuncs = vulkanInstance.deviceFunctions(mDevice);
-    assert(mDevFuncs && "Device functions should be valid!");
-
-    QVulkanFunctions *vulkanFunc = vulkanInstance.functions();
-    assert(vulkanFunc && "Vulkan instance functions should be valid!");
-    assert(physicalDev && "Physical device should be valid!");
-    VkPhysicalDeviceMemoryProperties& memProperties = sMemPropMap[device];
-    vulkanFunc->vkGetPhysicalDeviceMemoryProperties(physicalDev, &memProperties);
+    assert(mResourceMgr && "Resource Manager should be valid!");
 }
 
 ImageDescr::~ImageDescr()
@@ -50,8 +41,10 @@ ImageDescr::~ImageDescr()
 
 void ImageDescr::release()
 {
-    mDevFuncs->vkDestroyImage(mDevice, mImage, nullptr);
-    mDevFuncs->vkFreeMemory(mDevice, mMem, nullptr);
+    QVulkanDeviceFunctions* devFuncs = mResourceMgr->deviceFunctions();
+    VkDevice device = mResourceMgr->device();
+    devFuncs->vkDestroyImage(device, mImage, nullptr);
+    devFuncs->vkFreeMemory(device, mMem, nullptr);
     mImage = nullptr;
     mMem = nullptr;
 }
@@ -71,8 +64,7 @@ void ImageDescr::swapAll(ImageDescr&& other)
 {
     std::swap(mMem, other.mMem);
     std::swap(mImage, other.mImage);
-    std::swap(mDevice, other.mDevice);
-    std::swap(mDevFuncs, other.mDevFuncs);
+    std::swap(mResourceMgr, other.mResourceMgr);
 }
 
 bool ImageDescr::createImage(VkFormat pixelFormat, VkExtent3D imageSize, uint32_t mipLevels, const uint8_t* data,
@@ -80,6 +72,9 @@ bool ImageDescr::createImage(VkFormat pixelFormat, VkExtent3D imageSize, uint32_
 {
     release();
     VkResult result = VK_SUCCESS;
+
+    QVulkanDeviceFunctions* devFuncs = mResourceMgr->deviceFunctions();
+    VkDevice device = mResourceMgr->device();
 
     //
     // Image description
@@ -101,7 +96,7 @@ bool ImageDescr::createImage(VkFormat pixelFormat, VkExtent3D imageSize, uint32_
     //imageInfo.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
 
-    result = mDevFuncs->vkCreateImage(mDevice, &imageInfo, nullptr, &mImage);
+    result = devFuncs->vkCreateImage(device, &imageInfo, nullptr, &mImage);
     if (result != VK_SUCCESS) {
         qWarning("Can't create image\n");
         return false;
@@ -111,14 +106,14 @@ bool ImageDescr::createImage(VkFormat pixelFormat, VkExtent3D imageSize, uint32_
     // Memory requirements for this image
     //
     VkMemoryRequirements memReqs;
-    mDevFuncs->vkGetImageMemoryRequirements(mDevice, mImage, &memReqs);
+    devFuncs->vkGetImageMemoryRequirements(device, mImage, &memReqs);
 
     //
     // Suitable memory type available on physical device
     //
     uint32_t memoryTypeIndex = ~0u;
     {
-        VkPhysicalDeviceMemoryProperties& physDevMemProps = sMemPropMap[mDevice];
+        const VkPhysicalDeviceMemoryProperties& physDevMemProps = mResourceMgr->phyDevMemProps();
 
         uint32_t memoryPropertyFlag = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT     // allow write by host
                                     | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
@@ -143,7 +138,7 @@ bool ImageDescr::createImage(VkFormat pixelFormat, VkExtent3D imageSize, uint32_
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memReqs.size;
     allocInfo.memoryTypeIndex = memoryTypeIndex;
-    result = mDevFuncs->vkAllocateMemory(mDevice, &allocInfo, nullptr, &mMem);
+    result = devFuncs->vkAllocateMemory(device, &allocInfo, nullptr, &mMem);
     if (result != VK_SUCCESS) {
         qWarning("Can't allocate memory for image\n");
         return false;
@@ -218,7 +213,7 @@ bool ImageDescr::createImage(VkFormat pixelFormat, VkExtent3D imageSize, uint32_
     VkDeviceSize offset = 0;
     VkMemoryMapFlags mappingFlags = 0; // reserved for future use
     void* deviceMemMapped = nullptr;
-    mDevFuncs->vkMapMemory(mDevice, mMem, offset, memReqs.size, mappingFlags, &deviceMemMapped);
+    devFuncs->vkMapMemory(device, mMem, offset, memReqs.size, mappingFlags, &deviceMemMapped);
 
 #if 0
     uint32_t imgSize = imageSize.width * imageSize.height * imageSize.depth * pixelSize;
@@ -236,7 +231,7 @@ bool ImageDescr::createImage(VkFormat pixelFormat, VkExtent3D imageSize, uint32_
             subresource.arrayLayer = al;
 
             VkSubresourceLayout srlayout;
-            mDevFuncs->vkGetImageSubresourceLayout(mDevice, mImage, &subresource, &srlayout);
+            devFuncs->vkGetImageSubresourceLayout(device, mImage, &subresource, &srlayout);
 
             qInfo("Coping image [al=%d][ml=%d]. Offset: %d, Size: %lld, rowPitch: %lld,  arrayPitch: %lld,  depthPitch: %lld\n"
                   , al, ml
@@ -256,9 +251,9 @@ bool ImageDescr::createImage(VkFormat pixelFormat, VkExtent3D imageSize, uint32_
     }
 #endif
 
-    mDevFuncs->vkUnmapMemory(mDevice, mMem);
+    devFuncs->vkUnmapMemory(device, mMem);
 
-    result = mDevFuncs->vkBindImageMemory(mDevice, mImage, mMem, offset);
+    result = devFuncs->vkBindImageMemory(device, mImage, mMem, offset);
     if (result != VK_SUCCESS) {
         qWarning("Can't bind memory to image\n");
         return false;

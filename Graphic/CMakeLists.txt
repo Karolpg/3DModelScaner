@@ -15,10 +15,12 @@ include_directories(${VK_INCLUDE_DIRS} ${GLM_INCLUDE_DIRS} ${SPIRV_CROSS_PATH})
 # SOURCE
 #
 add_library(graphic  STATIC  BufferDescr.cpp
+                             DrawManager.cpp
                              GraphicObject.cpp
                              ImageDescr.cpp
                              ImageViewDescr.cpp
                              PipelineManager.cpp
+                             ResourceManager.cpp
                              SamplerDescr.cpp)
 
 target_link_libraries(graphic ${QT_LIBS} ${SPIRV_CROSS_LIB})

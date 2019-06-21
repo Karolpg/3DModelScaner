@@ -23,24 +23,15 @@ SOFTWARE.
 */
 
 #include "BufferDescr.hpp"
+#include "ResourceManager.hpp"
 #include <QVulkanInstance>
 #include <QVulkanFunctions>
 #include <QVulkanDeviceFunctions>
 
-std::map<VkDevice, VkPhysicalDeviceMemoryProperties> BufferDescr::sMemPropMap;
-
-BufferDescr::BufferDescr(QVulkanInstance& vulkanInstance, VkDevice device, VkPhysicalDevice physicalDev)
-    : mDevice(device)
+BufferDescr::BufferDescr(ResourceManager* resourceMgr)
+    : mResourceMgr(resourceMgr)
 {
-    assert(mDevice && "Device should be valid!");
-    mDevFuncs = vulkanInstance.deviceFunctions(mDevice);
-    assert(mDevFuncs && "Device functions should be valid!");
-
-    QVulkanFunctions *vulkanFunc = vulkanInstance.functions();
-    assert(vulkanFunc && "Vulkan instance functions should be valid!");
-    assert(physicalDev && "Physical device should be valid!");
-    VkPhysicalDeviceMemoryProperties& memProperties = sMemPropMap[device];
-    vulkanFunc->vkGetPhysicalDeviceMemoryProperties(physicalDev, &memProperties);
+    assert(mResourceMgr && "Resource Manager should be valid!");
 }
 
 BufferDescr::~BufferDescr()
@@ -50,8 +41,10 @@ BufferDescr::~BufferDescr()
 
 void BufferDescr::release()
 {
-    mDevFuncs->vkDestroyBuffer(mDevice, mBuffer, nullptr);
-    mDevFuncs->vkFreeMemory(mDevice, mMem, nullptr);
+    QVulkanDeviceFunctions* devFuncs = mResourceMgr->deviceFunctions();
+    VkDevice device = mResourceMgr->device();
+    devFuncs->vkDestroyBuffer(device, mBuffer, nullptr);
+    devFuncs->vkFreeMemory(device, mMem, nullptr);
     mBuffer = nullptr;
     mMem = nullptr;
 }
@@ -71,14 +64,16 @@ void BufferDescr::swapAll(BufferDescr&& other)
 {
     std::swap(mMem, other.mMem);
     std::swap(mBuffer, other.mBuffer);
-    std::swap(mDevice, other.mDevice);
-    std::swap(mDevFuncs, other.mDevFuncs);
+    std::swap(mResourceMgr, other.mResourceMgr);
 }
 
 bool BufferDescr::createBuffer(const void* data, size_t dataSize, VkBufferUsageFlags usage)
 {
     release();
     VkResult result = VK_SUCCESS;
+
+    QVulkanDeviceFunctions* devFuncs = mResourceMgr->deviceFunctions();
+    VkDevice device = mResourceMgr->device();
 
     //
     // Buffer description
@@ -92,7 +87,7 @@ bool BufferDescr::createBuffer(const void* data, size_t dataSize, VkBufferUsageF
     //bufferInfo.pQueueFamilyIndices = ; //only when sharingMode == VK_SHARING_MODE_CONCURRENT
     //bufferInfo.queueFamilyIndexCount = ;
 
-    result = mDevFuncs->vkCreateBuffer(mDevice, &bufferInfo, nullptr, &mBuffer);
+    result = devFuncs->vkCreateBuffer(device, &bufferInfo, nullptr, &mBuffer);
     if (result != VK_SUCCESS) {
         qWarning("Can't create buffer\n");
         return false;
@@ -102,14 +97,14 @@ bool BufferDescr::createBuffer(const void* data, size_t dataSize, VkBufferUsageF
     // Memory requirements for this buffer
     //
     VkMemoryRequirements memReqs;
-    mDevFuncs->vkGetBufferMemoryRequirements(mDevice, mBuffer, &memReqs);
+    devFuncs->vkGetBufferMemoryRequirements(device, mBuffer, &memReqs);
 
     //
     // Suitable memory type available on physical device
     //
     uint32_t memoryTypeIndex = ~0u;
     {
-        VkPhysicalDeviceMemoryProperties& physDevMemProps = sMemPropMap[mDevice];
+        const VkPhysicalDeviceMemoryProperties& physDevMemProps = mResourceMgr->phyDevMemProps();
 
         uint32_t memoryPropertyFlag = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT     // allow write by host
                                     | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
@@ -134,7 +129,7 @@ bool BufferDescr::createBuffer(const void* data, size_t dataSize, VkBufferUsageF
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memReqs.size;
     allocInfo.memoryTypeIndex = memoryTypeIndex;
-    result = mDevFuncs->vkAllocateMemory(mDevice, &allocInfo, nullptr, &mMem);
+    result = devFuncs->vkAllocateMemory(device, &allocInfo, nullptr, &mMem);
     if (result != VK_SUCCESS) {
         qWarning("Can't allocate memory for buffer\n");
         return false;
@@ -146,13 +141,13 @@ bool BufferDescr::createBuffer(const void* data, size_t dataSize, VkBufferUsageF
     VkDeviceSize offset = 0;
     VkMemoryMapFlags mappingFlags = 0; // reserved for future use
     void* deviceMemMapped = nullptr;
-    mDevFuncs->vkMapMemory(mDevice, mMem, offset, memReqs.size, mappingFlags, &deviceMemMapped);
+    devFuncs->vkMapMemory(device, mMem, offset, memReqs.size, mappingFlags, &deviceMemMapped);
 
     memcpy(deviceMemMapped, data, dataSize);
 
-    mDevFuncs->vkUnmapMemory(mDevice, mMem);
+    devFuncs->vkUnmapMemory(device, mMem);
 
-    result = mDevFuncs->vkBindBufferMemory(mDevice, mBuffer, mMem, offset);
+    result = devFuncs->vkBindBufferMemory(device, mBuffer, mMem, offset);
     if (result != VK_SUCCESS) {
         qWarning("Can't bind memory to buffer\n");
         return false;

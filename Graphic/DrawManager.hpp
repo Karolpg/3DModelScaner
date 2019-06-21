@@ -25,33 +25,25 @@ SOFTWARE.
 #pragma once
 
 #include <vulkan/vulkan.h>
+#include <memory>
+#include <glm/glm.hpp>
 
-class ResourceManager;
-
-class ImageDescr
+class DrawManager
 {
 public:
-    ImageDescr(ResourceManager* resourceMgr);
-    ~ImageDescr();
+    void setCmdBuffer(VkCommandBuffer cmdBuf);
+    VkCommandBuffer getCmdBuffer() const;
 
-    bool createImage(VkFormat pixelFormat, VkExtent3D imageSize, uint32_t mipLevels, const uint8_t* data,
-                     bool generateMipMaps, VkImageUsageFlags usage);
-    VkImage getImage() const { return mImage; }
-    VkDeviceMemory getMem() const { return mMem; }
+    void setProjMatrix(const std::shared_ptr<glm::mat4x4>& projMtx);
+    const std::shared_ptr<glm::mat4x4>& getProjMatrix() const;
 
-    ImageDescr(const ImageDescr&) = delete;
-    ImageDescr& operator=(const ImageDescr&) = delete;
+    void setViewMatrix(const std::shared_ptr<glm::mat4x4>& viewMtx);
+    const std::shared_ptr<glm::mat4x4>& getViewMatrix() const;
 
-    ImageDescr(ImageDescr&&);
-    ImageDescr& operator=(ImageDescr&&);
+private:
+    VkCommandBuffer mCmdBuf;
 
-protected:
-    void release();
-    void swapAll(ImageDescr&&);
-
-    VkImage mImage = nullptr;
-    VkDeviceMemory mMem = nullptr;
-
-    ResourceManager* mResourceMgr;
+    std::shared_ptr<glm::mat4x4> mViewMtx;
+    std::shared_ptr<glm::mat4x4> mProjMtx;
 };
 
